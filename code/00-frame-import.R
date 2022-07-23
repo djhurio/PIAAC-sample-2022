@@ -15,6 +15,12 @@ dat[, adm_terit_kods := substr(atvk, 1, 4)]
 # dat[, .(reg_date, lubridate::mdy(sub(" .*$", "", reg_date)))]
 dat[, reg_date := lubridate::mdy(sub(" .*$", "", reg_date))]
 
+dat[grep("\"\"", adrese_ir), .(adrese_ir)]
+dat[grep("\"\"", adrese_vzd), .(adrese_vzd)]
+
+dat[grep("\"\"", adrese_ir), adrese_ir := gsub("\"\"", "\"", adrese_ir)]
+dat[grep("\"\"", adrese_vzd), adrese_vzd := gsub("\"\"", "\"", adrese_vzd)]
+
 str(dat)
 
 fwrite(x = dat, file = "data/frame.csvy.gz", yaml = T)
