@@ -205,17 +205,59 @@ dat[, .N, keyby = .(STRAT_PSU, terit_tips_kods)] |>
 
 
 
-# Create file
-
-vars_scf <- c(
-  intersect(tab_vars$Variable.name, names(dat)),
-  grep("PROB_HH[1-6]", names(dat), value = T)
-)
-
+# Create SCF file
+vars_scf <- intersect(tab_vars$Variable.name, names(dat))
 dat_scf <- dat[, ..vars_scf]
 
-# Save DU sample
+
+
+# Metadata for SampleSelectionForm_SS_3_LVA.xlsx
+vars_scf
+
+sapply(dat_scf, class)
+vars_scf_type <- substr(sapply(dat_scf, class), 1, 1) |> toupper() |> unname()
+vars_scf_type[vars_scf_type == "I"] <- "N"
+vars_scf_type
+
+vars_scf_len <- sapply(dat_scf, \(x) max(nchar(x)), USE.NAMES = F)
+vars_scf_len
+
+dat_scf_meta <- data.table(var_name = vars_scf,
+                           type = vars_scf_type,
+                           length = vars_scf_len)
+
+tab_vars[, .(Variable.name)]
+
+dat_scf_meta <- merge(x = dat_scf_meta,
+                      y = tab_vars[, .(Variable.name, Label)],
+                      by.x = "var_name",
+                      by.y = "Variable.name",
+                      all.x = T,
+                      sort = F)
+
+
+# Save Survey Control File
 fwrite(    x = dat_scf, file = "data/sample_piaac_scf.csvy", yaml = T)
 write.xlsx(x = dat_scf, file = "data/sample_piaac_scf.xlsx",
+           overwrite = T, colWidths = "auto",
+           firstActiveRow = 2, firstActiveCol = 3)
+write.xlsx(x = dat_scf_meta, file = "data/sample_piaac_scf_meta.xlsx",
+           overwrite = T, colWidths = "auto",
+           firstActiveRow = 2)
+
+dat_scf[, .N]
+
+# Save sample file for fieldwork
+dat_fw <- dat[, .(CASEID, STRAT_PSU, ID_PSU, ID_HH, SUBSAMP,
+                  reg_stat_kods, reg_stat_nosauk,
+                  adm_terit_kods, adm_terit_nosauk,
+                  atvk, atvk_nosauk,
+                  terit_tips_kods, terit_tips_nosauk,
+                  adr_kods, adrese_ir,
+                  lks92x, lks92y, lon, lat)]
+
+# Save sample file for fieldwork
+fwrite(    x = dat_fw, file = "data/sample_piaac_fw.csvy", yaml = T)
+write.xlsx(x = dat_fw, file = "data/sample_piaac_fw.xlsx",
            overwrite = T, colWidths = "auto",
            firstActiveRow = 2, firstActiveCol = 3)

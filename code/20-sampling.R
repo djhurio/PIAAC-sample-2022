@@ -85,7 +85,8 @@ dat[, .N, keyby = .(reg_stat_kods, reg_stat_nosauk)]
 # PSU frame
 frame_psu <- dat[
   , .(psu_mos = .N, lat = mean(lat), lon = mean(lon)),
-  keyby = .(ID_PSU, SORT_PSU, strata2019, reg_stat_kods, iec2019)
+  keyby = .(ID_PSU, SORT_PSU,
+            strata2019, reg_stat_kods, reg_stat_nosauk, iec2019)
 ]
 
 frame_psu[, sum(psu_mos)] == dat[, .N]
@@ -135,7 +136,8 @@ frame_psu[, strata_psu := fifelse(
 
 # Sample allocation by strata
 tab_strata <- frame_psu[, .(pop_psu = .N, pop_du = sum(psu_mos)),
-                        keyby = .(psu_cert, strata_psu)]
+                        keyby = .(psu_cert, strata_psu, strata2019,
+                                  reg_stat_kods, reg_stat_nosauk)]
 
 
 # Explicit strata used for stratifying PSUs 
@@ -342,6 +344,9 @@ plot.DT(DT = dat[ID_PSU == frame_psu[sample_psu == 1, sample(ID_PSU, 1)]],
         colour = "sample_du_f")
 dat[, sample_du_f := NULL]
 
+
+# Save PSU frame
+fwrite(x = frame_psu, file = "data/frame_psu.csvy", yaml = T)
 
 # Save DU frame
 fwrite(x = dat, file = "data/frame_piaac_sampled.csvy.gz", yaml = T)
