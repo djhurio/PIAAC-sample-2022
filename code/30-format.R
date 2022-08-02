@@ -70,7 +70,7 @@ dat[, paste0("PROB_HH", val) := lapply(
 dat[, .SD, .SDcols = patterns("PROB_HH")]
 dat[ID_PSU == first(ID_PSU), .SD, .SDcols = patterns("PROB_HH")]
 
-dat[, all.equal(PROB_HH, PROB_HH6)]
+dat[, all.equal(PROB_HH, PROB_HH10)]
 
 dat[, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
     .SDcols = patterns("PROB_HH")]

@@ -400,16 +400,31 @@ dat_sample[, .N, keyby = .(id)]
 
 # %%  - modulo (atlikums)
 # %/% - integer division (veselā daļa)
-dat_sample[(id %% 3L) != 0L, SUBSAMP := 1L] # initial sample
-dat_sample[(id %% 3L) == 0L, SUBSAMP := 1L + (id / 3L)] # reserve
-dat_sample[SUBSAMP > 6L, SUBSAMP := 6L]
+
+# Initial (main) sample
+dat_sample[(id %% 3L != 0L), SUBSAMP := pmin(1L + (id %/% 3L),  5L)]
+
+# Reserve sample with almost even spatial distribution
+dat_sample[(id %% 3 == 0L) & (id %/% 3 == 1L),                 SUBSAMP :=  6L]
+dat_sample[(id %% 3 == 0L) & (id %/% 3 == 4L),                 SUBSAMP :=  7L]
+dat_sample[(id %% 3 == 0L) & (id %/% 3 == 2L),                 SUBSAMP :=  8L]
+dat_sample[(id %% 3 == 0L) & (id %/% 3 == 5L),                 SUBSAMP :=  9L]
+dat_sample[(id %% 3 == 0L) & (id %/% 3 == 3L | id %/% 3 > 5L), SUBSAMP := 10L]
 
 dat_sample[, .N, keyby = .(SUBSAMP)]
-dat_sample[, .N, keyby = .(SUBSAMP)][, P := N / first(N)][]
+dat_sample[, .N, keyby = .(SUBSAMP)][, P := N / sum(N[SUBSAMP <= 5])][]
 
 # Remove temp id
 dat_sample[, id := NULL]
 
+
+dat_sample[ID_PSU == first(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)]
+dat_sample[ID_PSU == first(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP <= 5]
+dat_sample[ID_PSU == first(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP >= 6]
+
+dat_sample[ID_PSU == last(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)]
+dat_sample[ID_PSU == last(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP <= 5]
+dat_sample[ID_PSU == last(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP >= 6]
 
 
 # Plot sample

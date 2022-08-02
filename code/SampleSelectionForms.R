@@ -103,10 +103,11 @@ tab_psu_14[psu_mos >= samp_int, .N, keyby = .(sample_psu)]
 # SampleSelectionForm_SS_2_DU_LVA.xlsx
 
 # Table 6.
-dat[, .N, keyby = .(SUBSAMP > 1)]
+dat[, .N, keyby = .(SUBSAMP > 5)]
 
 # Table 7.
-dat[, .N, keyby = .(SUBSAMP)]
+tab_du_7 <- dat[, .N, keyby = .(SUBSAMP)]
+write.xlsx(x = tab_du_7, file = "tables/tab_du_7.xlsx")
 
 # Table 8.
 dat[
