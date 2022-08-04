@@ -6,6 +6,7 @@ rm(list = ls())
 # Packages
 library(data.table)
 library(ggplot2)
+library(openxlsx)
 
 probs <- seq(0, 1, by = 0.25)
 probs
@@ -80,24 +81,34 @@ tab_psu_14 <- frame_psu[sample_psu == 1,
 write.xlsx(x = tab_psu_14, file = "tables/tab_psu_14.xlsx")
 
 # Table 15.
-tab_psu_14 <- frame_psu[,
+tab_psu_15 <- frame_psu[,
   .(ID_PSU, SORT_PSU, psu_mos,
     samp_int = sum(psu_mos) / sum(sample_psu),
     PROB_PSU, sample_psu, psu_cert),
   by = .(STRAT_PSU)]
-tab_psu_14
+tab_psu_15
 
-ggplot(data = tab_psu_14,
+ggplot(data = tab_psu_15,
        mapping = aes(x = psu_mos, y = PROB_PSU)) +
   geom_point() +
   facet_wrap(facets = vars(STRAT_PSU)) +
   theme_bw()
 
-tab_psu_14[, all(PROB_PSU <= 1)]
+tab_psu_15[, all(PROB_PSU <= 1)]
 
-tab_psu_14[PROB_PSU == 1, .N, keyby = .(sample_psu)]
+tab_psu_15[PROB_PSU == 1, .N, keyby = .(sample_psu)]
 
-tab_psu_14[psu_mos >= samp_int, .N, keyby = .(sample_psu)]
+tab_psu_15[psu_mos >= samp_int, .N, keyby = .(sample_psu)]
+
+
+# Listing of the first 200 records
+frame_psu[, samp_int := sum(psu_mos) / sum(sample_psu), by = .(STRAT_PSU)]
+
+tab_psu_15_sub <- frame_psu[
+  1:200, .(ID_PSU, STRAT_PSU, SORT_PSU, psu_mos, samp_int, PROB_PSU,
+           SUBSAMP = 1L, sample_psu)]
+tab_psu_15_sub
+write.xlsx(x = tab_psu_15_sub, file = "tables/tab_psu_15_sub.xlsx")
 
 
 # SampleSelectionForm_SS_2_DU_LVA.xlsx
@@ -163,3 +174,17 @@ dat[PROB_HH == 1]
 tab <- dat[, .(samp_int = sum(1 / PROB_HH) / .N,
                inv_prob = 1 / PROB_HH[1]), keyby = .(STRAT_PSU, ID_PSU)]
 tab[, all.equal(samp_int, inv_prob)]
+
+
+frame_du <- merge(frame_du, dat[, .(ID_PSU, ID_HH, SUBSAMP)],
+                  by = c("ID_PSU", "ID_HH"), all.x = T)
+
+tab_du_14 <- frame_du[
+  sample_psu == 1L,
+  .(ID_PSU, sample_psu, ID_HH, SORT_HH, PROB_HH, SUBSAMP, sample_du)
+][1:200]
+
+tab_du_14
+tab_du_14[sample_du == 1]
+
+write.xlsx(x = tab_du_14, file = "tables/tab_du_14.xlsx")
