@@ -132,9 +132,14 @@ dat[grep("LV-9999", adrese_ir)] |> head()
 dat[grep("LV-9999", adrese_ir), .N, keyby = .(pop_piaac, der_piaac)]
 
 # Exclude from PIAAC frame
-dat[grepl("LV-9999", adrese_ir) & der_piaac == 1L, .N]
+dat[grepl("LV-9999", adrese_ir) & der_piaac == 1L, .N] # 88
 dat[grepl("LV-9999", adrese_ir) & der_piaac == 1L, der_piaac := 0L]
 dat[grepl("LV-9999", adrese_ir) & der_piaac == 1L, .N]
+
+
+# UC
+dat[pop_piaac == 1, round(1 - mean(der_piaac), 4)]
+# 0.0061
 
 
 # Filter PIAAC frame

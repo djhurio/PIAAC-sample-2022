@@ -7,6 +7,7 @@ rm(list = ls())
 # Packages
 library(data.table)
 library(openxlsx)
+library(sampling)
 
 # Load variable names
 tab_vars <- read.xlsx(xlsxFile = "../info/survey-control-file.xlsx")
@@ -76,6 +77,17 @@ dat[, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
     .SDcols = patterns("PROB_HH")]
 dat[, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
     .SDcols = patterns("PROB_HH"), keyby = .(STRAT_PSU)]
+
+
+# PROB_SMPFLG1
+# Probability that the within-household sampling flag SMPFLG1 was set to 1
+# Required for screener countries.
+# Indicates the rate at which the sampling flag was set to 1.
+# Equal to 1 if no stratification for within household selection.
+# 
+# PROB_SMPFLG1:
+# Please set to 1 since you do not have stratification within household.
+dat[, PROB_SMPFLG1 := 1L]
 
 
 # STRAT_PSU
@@ -170,6 +182,43 @@ dat[ADDRESS4 == "LV-9999", .(adr_kods_maja, adr_kods_dziv, adrese_ir)]
 dat[, n := NULL]
 
 
+# ADD_DU
+# Added dwelling unit (DU) Flag
+# Required for countries with screeners;
+# Flag to indicate whether the DU was added during data collection
+# through a coverage enhancement procedure, such as the hidden DU procedure;
+# 0=false, 1=true. Equal to 0 for the initial sample.
+# 
+# ADD_DU: Please set to 0 in the SCF
+dat[, ADD_DU := 0L]
+
+
+# QCFLAG_ASSIGN
+# Quality control flag 
+# Required; 0=not selected, 1=selected. At least 10% cases need to have value 1.
+# 
+# QCFLAG_ASSIGN: At least 10% cases need to have value 1.
+
+X <- model.matrix(object = PROB_SMPFLG1 ~ factor(STRAT_PSU) + factor(SUBSAMP),
+                  data = dat)
+head(X)
+
+set.seed(224946)
+dat[, QCFLAG_ASSIGN := sampling::samplecube(X = X,
+                                            pik = rep(.1, .N),
+                                            order = 2,
+                                            method = 2)]
+
+rm(X)
+
+dat[, .N]
+dat[, .N, keyby = .(QCFLAG_ASSIGN)][, P := prop.table(N)][]
+# dat[, .(STRAT_PSU, ID_PSU, ID_HH, QCFLAG_ASSIGN)] |> View()
+
+dat[, round(mean(QCFLAG_ASSIGN), 2)]
+dat[, round(mean(QCFLAG_ASSIGN), 2), keyby = .(SUBSAMP)]
+dat[, round(mean(QCFLAG_ASSIGN), 2), keyby = .(STRAT_PSU)]
+
 # SUBSAMP
 # Subsample flag
 # Required;
@@ -180,6 +229,39 @@ dat[, n := NULL]
 # 9 = released sample #9.
 dat[, .(SUBSAMP)]
 dat[, .N, keyby = .(SUBSAMP)]
+
+
+# SAMPTYPE
+# Flag for incentive groups (FT) or supplemental sample (MS)
+# For FT, required for international CMS countries that are doing an incentive
+# experiment. Values 1-9 for the different incentive groups.
+# For MS, required for all countries;
+# 1: PIAAC sample
+# 2: Supplemental sample #1,
+# 3: Supplemental sample #2, …etc.
+# 
+# SAMPTYPE: Please set to 1 since you do not have supplemental sample
+dat[, SAMPTYPE := 1L]
+
+
+# SMPFLG1
+# Flag to indicate whether any persons should be selected from STRATUM 1
+# within the household
+# Required for screener countries;
+# If no stratification for within household selection, setto 1; 1=Yes,0=No.
+# 
+# SMPFLG1: Please set it to 1 since there is no stratification within household.
+dat[, SMPFLG1 := 1L]
+
+
+# EXCFRM_PROP
+# Proportion in target population who are excluded from the sampling frame
+# Required. Constant.
+# 
+# EXCFRM_PROP:
+# Proportion in target population who are excluded from the sampling frame
+dat[, EXCFRM_PROP := 0.0061]
+
 
 # REGION
 # Region
@@ -248,7 +330,7 @@ write.xlsx(x = dat_scf_meta, file = "data/sample_piaac_scf_meta.xlsx",
 dat_scf[, .N]
 
 # Save sample file for fieldwork
-dat_fw <- dat[, .(CASEID, STRAT_PSU, ID_PSU, ID_HH, SUBSAMP,
+dat_fw <- dat[, .(CASEID, STRAT_PSU, ID_PSU, ID_HH, SUBSAMP, QCFLAG_ASSIGN,
                   reg_stat_kods, reg_stat_nosauk,
                   adm_terit_kods, adm_terit_nosauk,
                   atvk, atvk_nosauk,
