@@ -199,7 +199,62 @@ dat[, .(strata2019, iec2019, build_order, flat_num_ir)] |> anyDuplicated()
 # Does not include CNTRYID;
 # Matches to other PIAAC databases when combined with CNTRYID;
 # Blank if persons are selected from registries.
+
+# PIAAC CYCLE 2 - CHECK DIGITS FOR OPERATIONAL IDS
+# PIAAC_CY2(2019_06)Check digits for operational IDs.pdf
+
+# ID <- c(1234567890L, 1234554321L)
+
+CalculateCD <- function(ID) {
+  
+  ID <- as.integer(ID)
+  ID <- as.character(ID)
+  
+  if (min(nchar(ID)) != max(nchar(ID))) stop("All IDs should be same length")
+  
+  intIDLength <- nchar(ID[1])
+  if (intIDLength == 0L) stop("ID lengths should be 1+")
+  
+  IDm <- strsplit(ID, "") |> unlist() |>
+    matrix(nrow = length(ID), ncol = intIDLength, byrow = T) |> as.integer()
+  
+  IDw <- rep(c(3, 1), length.out = intIDLength) |> rep(times = length(ID)) |>
+    matrix(nrow = length(ID), ncol = intIDLength, byrow = T)
+  
+  intSum <- (IDm * IDw) |> rowSums()
+  
+  intCheckDigit <- 10L - intSum %% 10
+  intCheckDigit[intCheckDigit == 10L] <- 0L
+  
+  return(as.character(intCheckDigit))
+
+}
+
+CalculateCD(0:9) |> sort()
+CalculateCD(10 + 0:9) |> sort()
+CalculateCD(c(1234567890L, 1234554321L)) == c("5", "0")
+
+VerifyID <- function(IDwithCD) {
+  
+  IDwithCD <- as.integer(IDwithCD)
+  IDwithCD <- as.character(IDwithCD)
+  
+  if (min(nchar(IDwithCD)) != max(nchar(IDwithCD))) {
+    stop("All IDs should be same length")
+  }
+  
+  intIDLength <- nchar(IDwithCD[1])
+  if (intIDLength < 2L) stop("ID lengths should be 2+")
+  
+  intCheckDigitVerify <- CalculateCD(substr(IDwithCD, 1, intIDLength - 1))
+  
+  return(intCheckDigitVerify == substr(IDwithCD, intIDLength, intIDLength))
+  
+}
+
 dat[, CASEID := 1e6L + .I]
+dat[, CASEID := paste0(CASEID, CalculateCD(CASEID))]
+dat[, all(VerifyID(CASEID))]
 
 # Sampling ID: Primary sampling unit (PSU) identification number
 # Required if area PSUs are selected; Blank if no PSU selection.

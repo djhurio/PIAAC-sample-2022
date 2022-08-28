@@ -10,9 +10,19 @@ library(openxlsx)
 library(sampling)
 
 # Load variable names
-tab_vars <- read.xlsx(xlsxFile = "../info/survey-control-file.xlsx")
-setDT(tab_vars)
-tab_vars[, .(Variable.name, Format, Type)]
+
+# Survey Control File (SCF)
+tab_vars_scf <- read.xlsx(xlsxFile = "../info/survey-control-file.xlsx")
+setDT(tab_vars_scf)
+tab_vars_scf[, .(Variable.name, Format, Type)]
+
+# Sample Design International File (SDIF)
+tab_vars_sdif <- read.xlsx(
+  xlsxFile = "../info/sample-design-international-file.xlsx"
+)
+setDT(tab_vars_sdif)
+tab_vars_sdif[, .(Variable.name, Format, Type)]
+
 
 # Load sample file
 dat <- fread(file = "data/sample_piaac.csvy", yaml = T)
@@ -36,46 +46,80 @@ dat[, CNTRYID := 428L]
 # Matches to other PIAAC databases when combined with CNTRYID;
 # Blank if persons are selected from registries.
 dat[, .(CASEID)]
+dat[sample_du == 1, .(CASEID)]
+dat[sample_ft == 1, .(CASEID)]
 
 # ID_PSU
 # Sampling ID: Primary sampling unit (PSU) identification number
 # Required if area PSUs are selected; Blank if no PSU selection.
+dat[sample_du == 1, .(ID_PSU)]
+dat[sample_du == 1, .N, keyby = .(ID_PSU)]
+
+dat[sample_ft == 1, .(ID_PSU_FT)]
+dat[sample_ft == 1, .N, keyby = .(ID_PSU_FT)]
+
+dat[sample_ft == 1, ID_PSU := ID_PSU_FT]
+dat[, ID_PSU_FT := NULL]
+
 dat[, .(ID_PSU)]
+dat[, .N, keyby = .(ID_PSU)]
+
 
 # ID_HH
 # Sampling ID: Household (HH) identification number
 # Required if HHs are selected;
 # Blank if no household selection,
 # otherwise a sequential number is assigned within geographic clusters.
-dat[, .(ID_HH)]
+dat[sample_du == 1, .(ID_PSU, ID_HH)]
+dat[sample_du == 1, .(ID_PSU, ID_HH)] |> anyDuplicated()
+
+dat[sample_ft == 1, .(ID_PSU, ID_HH_FT)]
+dat[sample_ft == 1, .(ID_PSU, ID_HH_FT)] |> anyDuplicated()
+
+dat[sample_ft == 1, ID_HH := ID_HH_FT]
+dat[, ID_HH_FT := NULL]
+
+dat[, .(ID_PSU, ID_HH)]
+dat[, .(ID_PSU, ID_HH)] |> anyDuplicated()
+
 
 # PROB_PSU
 # First-stage sampling unit probability of selection
 # Required if area PSUs are selected; blank if no PSU selection.
-dat[, .(PROB_PSU)]
+dat[sample_du == 1, .(PROB_PSU)]
+dat[sample_ft == 1, .(PROB_PSU_FT)]
+
+dat[sample_ft == 1, PROB_PSU := PROB_PSU_FT]
+dat[, PROB_PSU_FT := NULL]
+
 
 # PROB_HH
 # HH probability of selection (within prior-stage clusters, if applicable)
 # Required if household sampling; blank for one-stage designs.
-dat[, .(PROB_HH)]
+dat[sample_du == 1, .(PROB_HH)]
+dat[sample_ft == 1, .(PROB_HH_FT)]
+
+dat[sample_ft == 1, PROB_HH := PROB_HH_FT]
+dat[, PROB_HH_FT := NULL]
+
 
 # Different values of PROB_HH dependeing on release of reserve sample
 dat[, .N, keyby = .(SUBSAMP)]
-val <- unique(dat$SUBSAMP)
+val <- dat[, sort(unique(SUBSAMP))]
 
-dat[, paste0("PROB_HH", val) := lapply(
+dat[sample_du == 1, paste0("PROB_HH", val) := lapply(
   X = val,
   FUN = \(x) round(((SUBSAMP <= x) * sum(SUBSAMP <= x) / psu_mos), digits = 12)
 ), by = .(STRAT_PSU, ID_PSU)]
 
-dat[, .SD, .SDcols = patterns("PROB_HH")]
-dat[ID_PSU == first(ID_PSU), .SD, .SDcols = patterns("PROB_HH")]
+dat[sample_du == 1, .SD, .SDcols = patterns("PROB_HH")]
+dat[sample_du == 1][ID_PSU == first(ID_PSU), .SD, .SDcols = patterns("PROB_HH")]
 
-dat[, all.equal(PROB_HH, PROB_HH10)]
+dat[sample_du == 1, all.equal(PROB_HH, PROB_HH10)]
 
-dat[, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
+dat[sample_du == 1, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
     .SDcols = patterns("PROB_HH")]
-dat[, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
+dat[sample_du == 1, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
     .SDcols = patterns("PROB_HH"), keyby = .(STRAT_PSU)]
 
 
@@ -93,18 +137,43 @@ dat[, PROB_SMPFLG1 := 1L]
 # STRAT_PSU
 # Explicit strata used for stratifying PSUs
 # Required if stratification is used for PSUs; blank otherwise.
-dat[, .(STRAT_PSU)]
-dat[, .N, keyby = .(STRAT_PSU)]
+dat[sample_du == 1, .(STRAT_PSU)]
+dat[sample_du == 1, .N, keyby = .(STRAT_PSU)]
+
+dat[sample_ft == 1, .(STRAT_PSU_FT)]
+dat[sample_ft == 1, .N, keyby = .(STRAT_PSU_FT)]
+
+dat[sample_ft == 1, STRAT_PSU := STRAT_PSU_FT]
+dat[, STRAT_PSU_FT := NULL]
+
 
 # SORT_PSU
 # Sort order for PSU selection
 # Required if systematic sampling of PSUs; blank otherwise.
-dat[, .(SORT_PSU)]
+dat[sample_du == 1, .(ID_PSU, SORT_PSU)]
+dat[sample_du == 1, all.equal(ID_PSU, SORT_PSU)]
+
+dat[sample_ft == 1, .(ID_PSU, SORT_PSU_FT)]
+dat[sample_ft == 1, all.equal(ID_PSU, SORT_PSU_FT)]
+
+dat[sample_ft == 1, SORT_PSU := SORT_PSU_FT]
+dat[, SORT_PSU_FT := NULL]
+
 
 # SORT_HH
 # Sort order for HH selection
 # Required if systematic sampling of households; blank otherwise.
-dat[, .(SORT_HH)]
+dat[sample_du == 1, .(ID_HH, SORT_HH)]
+dat[sample_du == 1, all.equal(ID_HH, SORT_HH)]
+
+dat[sample_ft == 1, .(ID_HH, SORT_HH_FT)]
+dat[sample_ft == 1, all.equal(ID_HH, SORT_HH_FT)]
+
+dat[sample_ft == 1, SORT_HH := SORT_HH_FT]
+dat[, SORT_HH_FT := NULL]
+
+names(dat)
+
 
 # ADDRESS1	Address line 1	Required
 # ADDRESS2	Address line 2	Optional
@@ -200,24 +269,35 @@ dat[, ADD_DU := 0L]
 # QCFLAG_ASSIGN: At least 10% cases need to have value 1.
 
 X <- model.matrix(object = PROB_SMPFLG1 ~ factor(STRAT_PSU) + factor(SUBSAMP),
-                  data = dat)
+                  data = dat[sample_du == 1])
+dim(X)
 head(X)
 
 set.seed(224946)
-dat[, QCFLAG_ASSIGN := sampling::samplecube(X = X,
-                                            pik = rep(.1, .N),
-                                            order = 2,
-                                            method = 2)]
-
+dat[sample_du == 1,
+    QCFLAG_ASSIGN := sampling::samplecube(X = X,
+                                          pik = rep(.1, .N),
+                                          order = 2,
+                                          method = 2)]
 rm(X)
 
-dat[, .N]
-dat[, .N, keyby = .(QCFLAG_ASSIGN)][, P := prop.table(N)][]
+dat[sample_du == 1, .N]
+dat[sample_du == 1, .N, keyby = .(QCFLAG_ASSIGN)][, P := prop.table(N)][]
 # dat[, .(STRAT_PSU, ID_PSU, ID_HH, QCFLAG_ASSIGN)] |> View()
 
-dat[, round(mean(QCFLAG_ASSIGN), 2)]
-dat[, round(mean(QCFLAG_ASSIGN), 2), keyby = .(SUBSAMP)]
-dat[, round(mean(QCFLAG_ASSIGN), 2), keyby = .(STRAT_PSU)]
+dat[sample_du == 1, round(mean(QCFLAG_ASSIGN), 2)]
+dat[sample_du == 1, round(mean(QCFLAG_ASSIGN), 2), keyby = .(SUBSAMP)]
+dat[sample_du == 1, round(mean(QCFLAG_ASSIGN), 2), keyby = .(STRAT_PSU)]
+
+set.seed(152537)
+dat[sample_ft == 1,
+    QCFLAG_ASSIGN := sampling::srswor(n = ceiling(.N * .1), N = .N),
+    by = .(STRAT_PSU, ID_PSU)]
+
+dat[sample_ft == 1, .(STRAT_PSU, ID_PSU, QCFLAG_ASSIGN)]
+dat[sample_ft == 1, round(mean(QCFLAG_ASSIGN), 2), keyby = .(STRAT_PSU)]
+dat[sample_ft == 1, round(mean(QCFLAG_ASSIGN), 2), keyby = .(ID_PSU)]
+
 
 # SUBSAMP
 # Subsample flag
@@ -228,7 +308,7 @@ dat[, round(mean(QCFLAG_ASSIGN), 2), keyby = .(STRAT_PSU)]
 # …
 # 9 = released sample #9.
 dat[, .(SUBSAMP)]
-dat[, .N, keyby = .(SUBSAMP)]
+dat[, .N, keyby = .(sample_ft, SUBSAMP)]
 
 
 # SAMPTYPE
@@ -260,7 +340,8 @@ dat[, SMPFLG1 := 1L]
 # 
 # EXCFRM_PROP:
 # Proportion in target population who are excluded from the sampling frame
-dat[, EXCFRM_PROP := 0.0061]
+dat[sample_du == 1, EXCFRM_PROP := 0.0061]
+dat[sample_ft == 1, EXCFRM_PROP := 0]
 
 
 # REGION
@@ -286,32 +367,44 @@ dat[, .N, keyby = .(STRAT_PSU, terit_tips_kods)] |>
                    value.var = "N", fill = 0L)
 
 
+# Sort
+# names(dat)
+setkey(dat, STRAT_PSU, ID_PSU, ID_HH)
+dat[, .(STRAT_PSU, ID_PSU, ID_HH)]
+
+
 
 # Create SCF file
-vars_scf <- intersect(tab_vars$Variable.name, names(dat))
-dat_scf <- dat[, ..vars_scf]
+vars_scf <- intersect(tab_vars_scf$Variable.name, names(dat))
+dat_scf_du <- dat[sample_du == 1, ..vars_scf]
+dat_scf_ft <- dat[sample_ft == 1, ..vars_scf]
+
+# Create SDIF file
+vars_sdif <- intersect(tab_vars_sdif$Variable.name, names(dat))
+dat_sdif_du <- dat[sample_du == 1, ..vars_sdif]
+dat_sdif_ft <- dat[sample_ft == 1, ..vars_sdif]
 
 
 
 # Metadata for SampleSelectionForm_SS_3_LVA.xlsx
 vars_scf
 
-sapply(dat_scf, class)
-vars_scf_type <- substr(sapply(dat_scf, class), 1, 1) |> toupper() |> unname()
+sapply(dat_scf_du, class)
+vars_scf_type <- substr(sapply(dat_scf_du, class), 1, 1) |> toupper() |> unname()
 vars_scf_type[vars_scf_type == "I"] <- "N"
 vars_scf_type
 
-vars_scf_len <- sapply(dat_scf, \(x) max(nchar(x)), USE.NAMES = F)
+vars_scf_len <- sapply(dat_scf_du, \(x) max(nchar(x)), USE.NAMES = F)
 vars_scf_len
 
 dat_scf_meta <- data.table(var_name = vars_scf,
                            type = vars_scf_type,
                            length = vars_scf_len)
 
-tab_vars[, .(Variable.name)]
+tab_vars_scf[, .(Variable.name)]
 
 dat_scf_meta <- merge(x = dat_scf_meta,
-                      y = tab_vars[, .(Variable.name, Label)],
+                      y = tab_vars_scf[, .(Variable.name, Label)],
                       by.x = "var_name",
                       by.y = "Variable.name",
                       all.x = T,
@@ -319,18 +412,38 @@ dat_scf_meta <- merge(x = dat_scf_meta,
 
 
 # Save Survey Control File
-fwrite(    x = dat_scf, file = "data/sample_piaac_scf.csvy", yaml = T)
-write.xlsx(x = dat_scf, file = "data/sample_piaac_scf.xlsx",
+fwrite(    x = dat_scf_du, file = "data/sample_piaac_scf.csv")
+write.xlsx(x = dat_scf_du, file = "data/sample_piaac_scf.xlsx",
            overwrite = T, colWidths = "auto",
            firstActiveRow = 2, firstActiveCol = 3)
+
+fwrite(    x = dat_scf_ft, file = "data/sample_piaac_scf_ft.csv")
+write.xlsx(x = dat_scf_ft, file = "data/sample_piaac_scf_ft.xlsx",
+           overwrite = T, colWidths = "auto",
+           firstActiveRow = 2, firstActiveCol = 3)
+
+# Save sample design international file (SDIF)
+fwrite(    x = dat_sdif_du, file = "data/sample_piaac_sdif.csv")
+write.xlsx(x = dat_sdif_du, file = "data/sample_piaac_sdif.xlsx",
+           overwrite = T, colWidths = "auto",
+           firstActiveRow = 2, firstActiveCol = 3)
+
+fwrite(    x = dat_sdif_ft, file = "data/sample_piaac_sdif_ft.csv")
+write.xlsx(x = dat_sdif_ft, file = "data/sample_piaac_sdif_ft.xlsx",
+           overwrite = T, colWidths = "auto",
+           firstActiveRow = 2, firstActiveCol = 3)
+
+# Save SCF metadata
 write.xlsx(x = dat_scf_meta, file = "data/sample_piaac_scf_meta.xlsx",
            overwrite = T, colWidths = "auto",
            firstActiveRow = 2)
 
-dat_scf[, .N]
+dat_scf_du[, .N]
+dat_scf_ft[, .N]
 
 # Save sample file for fieldwork
-dat_fw <- dat[, .(CASEID, STRAT_PSU, ID_PSU, ID_HH, SUBSAMP, QCFLAG_ASSIGN,
+dat_fw <- dat[, .(sample_du, sample_ft,
+                  CASEID, STRAT_PSU, ID_PSU, ID_HH, SUBSAMP, QCFLAG_ASSIGN,
                   reg_stat_kods, reg_stat_nosauk,
                   adm_terit_kods, adm_terit_nosauk,
                   atvk, atvk_nosauk,
@@ -338,8 +451,16 @@ dat_fw <- dat[, .(CASEID, STRAT_PSU, ID_PSU, ID_HH, SUBSAMP, QCFLAG_ASSIGN,
                   adr_kods, adrese_ir,
                   lks92x, lks92y, lon, lat)]
 
+dat_fw_du <- dat_fw[sample_du == 1]
+dat_fw_ft <- dat_fw[sample_ft == 1]
+
 # Save sample file for fieldwork
-fwrite(    x = dat_fw, file = "data/sample_piaac_fw.csvy", yaml = T)
-write.xlsx(x = dat_fw, file = "data/sample_piaac_fw.xlsx",
+fwrite(    x = dat_fw_du, file = "data/sample_piaac_fw.csv")
+write.xlsx(x = dat_fw_du, file = "data/sample_piaac_fw.xlsx",
+           overwrite = T, colWidths = "auto",
+           firstActiveRow = 2, firstActiveCol = 3)
+
+fwrite(    x = dat_fw_ft, file = "data/sample_piaac_fw_ft.csv")
+write.xlsx(x = dat_fw_ft, file = "data/sample_piaac_fw_ft.xlsx",
            overwrite = T, colWidths = "auto",
            firstActiveRow = 2, firstActiveCol = 3)

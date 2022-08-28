@@ -16,16 +16,7 @@ options(openxlsx.numFmt = NULL)
 source("code/TSP-sort-plot.R")
 
 # Rounding by preserving sum of values after rounding
-round_preserve_sum <- function(x, digits = 0) {
-  up <- 10 ^ digits
-  x <- x * up
-  y <- floor(x)
-  indices <- tail(order(x - y), round(sum(x)) - sum(y))
-  y[indices] <- y[indices] + 1
-  y / up
-}
-
-
+source(file = "code/round_preserve_sum.R")
 
 # Parameters
 sample_size_psu <- 1842L
@@ -359,12 +350,96 @@ dat[sample_du == 1, .N, keyby = .(lks92_imp)] # 12
 dat[sample_du == 1, .N, keyby = .(lks92_imp, lks92_imp_flag)]
 
 
+# Field Trial sample
+dat[, max(STRAT_PSU)]
+dat[, max(ID_PSU)]
+
+# dat[, .N, keyby = .(atvk, atvk_nosauk)]
+
+dat[, STRAT_PSU_FT := 99L]
+
+dat[atvk_nosauk == "Ventspils" &
+      grepl("Sarkanmuižas dambis", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9901L]
+dat[atvk_nosauk == "Rīga" &
+      grepl("Vecmīlgrāvja 1. līnija|Kāvu iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9902L]
+dat[atvk_nosauk == "Carnikavas pag." &
+      grepl("Liepu iela|Tulpju iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9903L]
+dat[atvk_nosauk == "Baldone" &
+      grepl("Vanagkalnu iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9904L]
+dat[adm_terit_nosauk == "Kuldīgas nov." & atvk_nosauk == "Kurmāles pag.",
+    ID_PSU_FT := 9905L]
+dat[atvk_nosauk == "Gulbene" &
+      grepl("O. Kalpaka iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9906L]
+dat[adm_terit_nosauk == "Valmieras nov." &
+      (atvk_nosauk == "Skaņkalnes pag." | atvk_nosauk == "Mazsalacas pag."),
+    ID_PSU_FT := 9907L]
+dat[adm_terit_nosauk == "Tukuma nov." & atvk_nosauk == "Smārdes pag." &
+      grepl("Milzkalne", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9908L]
+dat[adm_terit_nosauk == "Jēkabpils nov." & atvk_nosauk == "Mežāres pag." &
+      grepl("Rozessala", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9909L]
+dat[(atvk_nosauk == "Līvāni" &
+       grepl("Rīgas iela", adrese_ir, ignore.case = T)) |
+      (adm_terit_nosauk == "Jēkabpils nov." & atvk_nosauk == "Kūku pag."),
+    ID_PSU_FT := 9910L]
+dat[atvk_nosauk == "Brocēni" & grepl("Skolas iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9911L]
+dat[atvk_nosauk == "Rīga" & grepl("Tilta iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9912L]
+dat[atvk_nosauk == "Krāslava" & grepl("Sporta iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9913L]
+dat[atvk_nosauk == "Rīga" & grepl("Ģertrūdes iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9914L]
+dat[atvk_nosauk == "Rīga" & grepl("Slokas iela", adrese_ir, ignore.case = T),
+    ID_PSU_FT := 9915L]
+
+dat[, SORT_PSU_FT := ID_PSU_FT]
+
+dat[, .N, keyby = .(ID_PSU_FT)]
+dat[, (sum(sample_du)), keyby = .(ID_PSU_FT)]
+dat[, (.N - sum(sample_du)), keyby = .(ID_PSU_FT)]
+
+# Frame for the FT
+dat[, frame_ft := !is.na(ID_PSU_FT) & sample_du == 0L]
+dat[(frame_ft), .N, keyby = .(ID_PSU_FT)]
+
+# ID_HH_FT
+dat[(frame_ft), ID_HH_FT := 1:.N, by = .(ID_PSU_FT)]
+dat[, SORT_HH_FT := ID_HH_FT]
+
+# Sampling probabilities for the FT
+dat[, PROB_PSU_FT := as.numeric(frame_ft)]
+dat[ (frame_ft), PROB_HH_FT := frame_ft * 10 / sum(frame_ft), by = .(ID_PSU_FT)]
+dat[!(frame_ft), PROB_HH_FT := 0]
+dat[(frame_ft)]
+dat[, lapply(.SD, sum), .SDcols = c("frame_ft", "PROB_HH_FT"),
+    keyby = .(ID_PSU_FT)]
+
+# Sample FT
+set.seed(230239)
+dat[, sample_ft := sampling::UPsystematic(pik = PROB_HH_FT), by = .(ID_PSU_FT)]
+dat[, .(N = sum(frame_ft), n = sum(sample_ft)), keyby = .(ID_PSU_FT)]
+
+# dat[sample_ft == 1L, .(ID_PSU_FT, adrese_ir)][order(ID_PSU_FT)] |> View()
+
 # Sample
 dat_sample <- dat[
-  sample_du == 1,
-  .(CASEID, ID_PSU, ID_HH,
-    PROB_PSU, PROB_HH,
-    STRAT_PSU, SORT_PSU, SORT_HH,
+  sample_du == 1L | sample_ft == 1L,
+  .(CASEID,
+    sample_du, sample_ft,
+    STRAT_PSU, STRAT_PSU_FT,
+    ID_PSU, ID_PSU_FT,
+    SORT_PSU, SORT_PSU_FT,
+    PROB_PSU, PROB_PSU_FT,
+    ID_HH, ID_HH_FT,
+    SORT_HH, SORT_HH_FT,
+    PROB_HH, PROB_HH_FT,
     psu_mos, psu_cert,
     reg_stat_kods, reg_stat_nosauk,
     adm_terit_kods, adm_terit_nosauk,
@@ -394,44 +469,98 @@ dat_sample[, adrese_vzd := NULL]
 # 3 = released sample #3,
 # …
 # 9 = released sample #9.
-dat_sample[, id := 1:.N, by = .(STRAT_PSU, ID_PSU)]
-dat_sample[, .(STRAT_PSU, ID_PSU, id)]
-dat_sample[, .N, keyby = .(id)]
+dat_sample[sample_du == 1L, id := 1:.N, by = .(STRAT_PSU, ID_PSU)]
+dat_sample[sample_du == 1L, max_id := max(id), by = .(STRAT_PSU, ID_PSU)]
+# dat_sample[, angle := 2 * pi * id / max_id]
+
+foo <- function(max_id = 15L) {
+  df <- data.table(id = 0:max_id, max_id)
+  df[, x := id / max(id) * 2 * pi]
+  df[, y := 1L]
+  return(df[])
+}
+
+tab <- lapply(5:8 * 3, foo) |> rbindlist()
+tab
+
+ggplot(data = tab, mapping = aes(x = x, y = y)) +
+  geom_line() +
+  geom_label(mapping = aes(label = id)) +
+  coord_polar() +
+  scale_x_continuous(breaks = round(0:7 / 4 * pi, 2),
+                     labels = paste0(0:7 / 4, "π")) +
+  scale_y_continuous(breaks = NULL, limits = c(0, 1.3)) +
+  facet_wrap(facets = vars(max_id), nrow = 2) +
+  theme_bw()
+
+
+
+dat_sample[sample_du == 1L][ID_PSU == first(ID_PSU),
+                            .(STRAT_PSU, ID_PSU, id, max_id)]
+dat_sample[sample_du == 1L][ID_PSU == last(ID_PSU),
+                            .(STRAT_PSU, ID_PSU, id, max_id)]
+dat_sample[sample_du == 1L, .N, keyby = .(id)]
+dat_sample[sample_du == 1L, .N, keyby = .(max_id)]
 
 # %%  - modulo (atlikums)
 # %/% - integer division (veselā daļa)
 
+set.seed(3544)
+dat_sample[sample_du == 1L, rand := rep(sample(0:2, 1), max(id)),
+           by = .(ID_PSU)]
+dat_sample[sample_du == 1L, .N, keyby = .(rand)]
+
 # Initial (main) sample
-dat_sample[(id %% 3L != 0L), SUBSAMP := pmin(1L + (id %/% 3L),  5L)]
+dat_sample[(sample_du == 1L) & (id %% 3L != rand),
+           SUBSAMP := rep(1:(first(max_id) / 3), each = 2),
+           by = .(ID_PSU)]
+dat_sample[SUBSAMP > 5L, SUBSAMP := 5L]
+dat_sample[sample_du == 1L][ID_PSU == first(ID_PSU)]
+dat_sample[sample_du == 1L][ID_PSU == last(ID_PSU)]
 
-# Reserve sample with almost even spatial distribution
-dat_sample[(id %% 3 == 0L) & (id %/% 3 == 1L),                 SUBSAMP :=  6L]
-dat_sample[(id %% 3 == 0L) & (id %/% 3 == 4L),                 SUBSAMP :=  7L]
-dat_sample[(id %% 3 == 0L) & (id %/% 3 == 2L),                 SUBSAMP :=  8L]
-dat_sample[(id %% 3 == 0L) & (id %/% 3 == 5L),                 SUBSAMP :=  9L]
-dat_sample[(id %% 3 == 0L) & (id %/% 3 == 3L | id %/% 3 > 5L), SUBSAMP := 10L]
+# Reserve sample with random spatial distribution
+set.seed(5108)
+dat_sample[(sample_du == 1L) & (id %% 3L == rand),
+           SUBSAMP := 5L + sample(1:(first(max_id) / 3)),
+           by = .(ID_PSU)]
+# dat_sample[SUBSAMP > 10L]
+dat_sample[SUBSAMP > 10L, SUBSAMP := 10L]
+dat_sample[sample_du == 1L][ID_PSU == first(ID_PSU)]
+dat_sample[sample_du == 1L][ID_PSU == last(ID_PSU)]
 
-dat_sample[, .N, keyby = .(SUBSAMP)]
-dat_sample[, .N, keyby = .(SUBSAMP)][, P := N / sum(N[SUBSAMP <= 5])][]
+dat_sample[sample_du == 1L, .N, keyby = .(SUBSAMP)]
+dat_sample[sample_du == 1L, .N, keyby = .(SUBSAMP)][
+  , P := N / sum(N[SUBSAMP <= 5])][]
 
-# Remove temp id
+# FT
+dat_sample[sample_ft == 1L, SUBSAMP := 1L]
+
+# Remove temp variables
 dat_sample[, id := NULL]
+dat_sample[, max_id := NULL]
+# dat_sample[, angle := NULL]
+dat_sample[, rand := NULL]
 
+dat_sample[sample_du == 1L][ID_PSU == first(ID_PSU),
+                            .(ID_PSU, ID_HH, SUBSAMP)]
+dat_sample[sample_du == 1L][ID_PSU == first(ID_PSU),
+                            .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP <= 5]
+dat_sample[sample_du == 1L][ID_PSU == first(ID_PSU),
+                            .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP >= 6]
 
-dat_sample[ID_PSU == first(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)]
-dat_sample[ID_PSU == first(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP <= 5]
-dat_sample[ID_PSU == first(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP >= 6]
-
-dat_sample[ID_PSU == last(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)]
-dat_sample[ID_PSU == last(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP <= 5]
-dat_sample[ID_PSU == last(ID_PSU), .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP >= 6]
+dat_sample[sample_du == 1L][ID_PSU == last(ID_PSU),
+                            .(ID_PSU, ID_HH, SUBSAMP)]
+dat_sample[sample_du == 1L][ID_PSU == last(ID_PSU),
+                            .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP <= 5]
+dat_sample[sample_du == 1L][ID_PSU == last(ID_PSU),
+                            .(ID_PSU, ID_HH, SUBSAMP)][SUBSAMP >= 6]
 
 
 # Plot sample
 dat_sample[, SUBSAMP_f := factor(SUBSAMP)]
-plot.DT(DT = dat_sample[ID_PSU == frame_psu[sample_psu == 1,
-                                            sample(ID_PSU, 1)]],
-        colour = "SUBSAMP_f")
+plot.DT(DT = dat_sample[sample_du == 1L][ID_PSU == frame_psu[sample_psu == 1,
+                                                             sample(ID_PSU, 1)]],
+        colour = "SUBSAMP_f", size = "SUBSAMP")
 dat_sample[, SUBSAMP_f := NULL]
 
 
@@ -448,10 +577,10 @@ map_data <- dat_sample[, .(
   popup_label = paste0("ID_PSU = ", ID_PSU, "<br>",
                        "n = ", .N, "<br>",
                        paste(adrese_ir, collapse = "<br>"))
-), keyby = .(ID_PSU, lon, lat)]
+), keyby = .(sample_du, sample_ft, ID_PSU, lon, lat)]
 # map_data
 
-m <- leaflet(data = map_data) %>%
+m <- leaflet(data = map_data[sample_du == 1L]) %>%
   addTiles() %>%  # Add default OpenStreetMap map tiles
   addCircleMarkers(lng = ~lon,
                    lat = ~lat,
@@ -460,4 +589,14 @@ m <- leaflet(data = map_data) %>%
                    clusterOptions = markerClusterOptions())
 m  # Print the map
 
+m_ft <- leaflet(data = map_data[sample_ft == 1L]) %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  addCircleMarkers(lng = ~lon,
+                   lat = ~lat,
+                   popup = ~popup_label,
+                   stroke = T,
+                   clusterOptions = markerClusterOptions())
+m_ft  # Print the map
+
 htmlwidgets::saveWidget(widget = m, file = "maps/PIAAC-sample-total.html")
+htmlwidgets::saveWidget(widget = m_ft, file = "maps/PIAAC-sample-FT.html")
