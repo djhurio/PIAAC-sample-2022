@@ -1,0 +1,119 @@
+---
+title: "Selection Probabilities LVA"
+author: "Mārtiņš Liberts"
+format:
+  html
+editor_options: 
+  chunk_output_type:
+    console
+---
+
+:::{.column-page}
+
+# Three-stage stratified probability proportionate to size (PPS) designs
+
+## PSU selection
+
+$d =$ total number of dwellings to be sampled (main sample and reserve sample together);
+
+$D =$ total number of dwellings in the sampling frame;
+
+$\tilde{d} =$ planned number of dwellings to be sampled in PSU (main sample and reserve sample together);
+
+$D_{hi} = MOS_{hi} =$ number of dwellings in the sampling frame of PSU $i$ of stratum $h$, this is also measure of size for PSU;
+
+$m_h =$ number of PSUs to be sampled in stratum $h$;
+
+Let $r = d / D$ to be the owerall sampling fraction for dwellings.
+
+$$
+P_{hi} = \left\lbrace
+  \begin{matrix}
+    \frac{m_h \times D_{hi}}{\sum_{j \in h} D_{hj}} &
+      \text{if} &
+      D_{hi} < \frac{\tilde{d}}{r} \\
+    1 & \text{if} &
+      D_{hi} > \frac{\tilde{d}}{r}
+  \end{matrix}
+\right.
+$$
+
+
+## DU selection conditional
+
+$d_{hi} =$ number of dwellings to be sampled in PSU $i$ of stratum $h$;
+
+$$
+P_{k \mid hi} = \frac{d_{hi}}{D_{hi}}.
+$$
+
+The DU sample size in a PSU is
+
+$$
+d_{hi} = \left\lbrace
+  \begin{matrix}
+    \tilde{d} &
+      \text{if} &
+      D_{hi} < \frac{\tilde{d}}{r} \\
+    \left[ D_{hi} \times r \right]_3 \geqslant \tilde{d} &
+      \text{if} &
+      D_{hi} > \frac{\tilde{d}}{r}
+  \end{matrix}
+\right.
+$$
+
+Please note $d_{hi}$ is rounded to the closest multiple of 3 (because reserve sample is 50 % of the main sample) while preserving the total sample size, namely, $\sum d_{hi} = d$.
+
+## DU selection overall
+
+$$
+P_{hik} = \left\lbrace
+  \begin{matrix}
+    \frac{m_h \times D_{hi}}{\sum_{j \in h} D_{hj}} \times \frac{d_{hi}}{D_{hi}} =
+      \frac{m_h \times \tilde{d}}{\sum_{j \in h} D_{hj}} \approx r &
+      \text{if} &
+      D_{hi} < \frac{\tilde{d}}{r} \\
+    \frac{d_{hi}}{D_{hi}} \approx r &
+      \text{if} &
+      D_{hi} > \frac{\tilde{d}}{r}
+  \end{matrix}
+\right.
+$$
+
+
+
+## Person selection conditional
+
+$n_{hik} =$ number of persons to be sampled from dwelling $k$ in PSU $i$ of stratum $h$;
+
+$N_{hik} =$ total number of eligible persons in dwelling $k$ in PSU $i$ of stratum $h$.
+
+$$
+P_{l \mid hik} = \frac{n_{hik}}{N_{hik}}.
+$$
+
+## Person selection overall
+
+The _overall_ probability of selecting person $l$ from dwelling $k$ in PSU $i$ of stratum $h$ is
+
+$$
+P_{hikl} = P_{hi} \times P_{k \mid hi}  \times P_{l \mid hik} = \left\lbrace
+  \begin{matrix}
+    \frac{m_h \times \tilde{d}}{\sum_{j \in h} D_{hj}} \times
+      \frac{n_{hik}}{N_{hik}} &
+      \text{if} &
+      D_{hi} < \frac{\tilde{d}}{r} \\
+    \frac{d_{hi}}{D_{hi}} \times \frac{n_{hik}}{N_{hik}} &
+      \text{if} &
+      D_{hi} > \frac{\tilde{d}}{r}
+  \end{matrix}
+\right.
+$$
+
+or we can write
+
+$$
+P_{hikl} \approx r \times \frac{n_{hik}}{N_{hik}}.
+$$
+
+:::
