@@ -1,6 +1,7 @@
 # Sample Monitoring Parameter (SMP) file
 library(data.table)
 library(pxweb)
+library(openxlsx)
 
 # Reset
 rm(list = ls())
@@ -355,7 +356,7 @@ rm(varnames, x)
 # Required; ISO language codes.
 
 varnames <- grep("^LANG[0-9]+_NAME$", names(tab_smp), value = T)
-x <- c("lv", "ru", rep("", length(varnames) - 2))
+x <- c("lav", "rus", rep("", length(varnames) - 2))
 
 tab_smp[, c(varnames[1]), with = F]
 
