@@ -7,7 +7,7 @@
 /frame/*
 /maps/*
 
-*.xls
-*.xlsx
-*.html
+*.xls*
+*.htm*
 *files/
+*.odt*

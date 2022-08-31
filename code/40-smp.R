@@ -45,56 +45,70 @@ tab_smp[, CNTRYID := 428L]
 # Required; 1: Population registry, 2: Screener
 tab_smp[, DSGN := 2L]
 
-# SCR_EXP
-# Expected number of completed screeners
-# Initial person sample size: 14394
-tab_smp[, SCR_EXP := 14394L]
-
-# BQ_EXP
-# Expected number of completed BQs (full BQ or doorstep interview)
-# Expected number of BQs plus doorstep interviews: 9602
-tab_smp[, BQ_EXP := 9602L]
-
-# CC_EXP
-# Target number of completed cases
-# Expected number of completed cases: 7692
-tab_smp[, CC_EXP := 7692L]
-
-# MAIN_EXP
-# Target number of completed assessments
-# PIAAC Standard minimum number of completed assessments: 5000
-tab_smp[, MAIN_EXP := 5000L]
-
-
 # SCRRR_EXP
 # Expected screener response rate
 # Screener response rate = 75%
 # Between 0 and 100.
 tab_smp[, SCRRR_EXP := 75]
 
+# SCR_EXP
+# Expected number of completed screeners
+# Initial person sample size: 14394
+# tab_smp[, SCR_EXP := 14394L]
+# We expect it to be similar to
+# Total DUs in the main sample *
+# expected Screener eligibility rate *
+# expected Screener response rate.
+sampl[sample_du == 1 & SUBSAMP < 6, .N]
+tab_smp[, SCR_EXP := round(sampl[sample_du == 1 & SUBSAMP < 6, .N] * 0.96 *
+                             SCRRR_EXP / 100)]
+tab_smp[, .(SCR_EXP)]
+
 # BQRR_EXP
 # Expected BQ response rate
 # BQ response rate among those without a language barrier = 66.7%
 tab_smp[, BQRR_EXP := 66.7]
-
-# MAINRR_EXP
-# Expected assessment response rate
-# Assessment response rate = 80%
-tab_smp[, MAINRR_EXP := 80]
-
-# DSPCT_EXP
-# Expected percentage of doorstep interviews
-# Doorstep Interview response rate = 75%
-tab_smp[, DSPCT_EXP := 75]
 
 # SPSCR_EXP
 # Expected number of sampled persons per screener complete
 # Randomly select 1 person for household sizes up to 3 persons (including 3),
 # otherwise 2 persons, international CMS will be used
 frame[, .N, keyby = .(pers_sk_16_65)][, sum(N * (1 + (pers_sk_16_65 > 3))) / sum(N)]
-frame[, mean(1 + (pers_sk_16_65 > 3))]
 tab_smp[, SPSCR_EXP := frame[, round(mean(1 + (pers_sk_16_65 > 3)), 3)]]
 tab_smp[, .(SPSCR_EXP)]
+
+# BQ_EXP
+# Expected number of completed BQs (full BQ or doorstep interview)
+# Expected number of BQs plus doorstep interviews: 9602
+# tab_smp[, BQ_EXP := 9602L]
+# SCR_EXP * BQ_RR * (1 + proportion of households with 2 SPs)
+tab_smp[, BQ_EXP := round(SCR_EXP * BQRR_EXP / 100 * SPSCR_EXP)]
+tab_smp[, .(BQ_EXP)]
+
+# CC_EXP
+# Target number of completed cases
+# Expected number of completed cases: 7692
+tab_smp[, CC_EXP := 7692L]
+
+# MAINRR_EXP
+# Expected assessment response rate
+# Assessment response rate = 80%
+tab_smp[, MAINRR_EXP := 80]
+
+# MAIN_EXP
+# Target number of completed assessments
+# PIAAC Standard minimum number of completed assessments: 5000
+# tab_smp[, MAIN_EXP := 5000L]
+tab_smp[, MAIN_EXP := round(CC_EXP * MAINRR_EXP / 100)]
+tab_smp[, .(MAIN_EXP)]
+
+# DSPCT_EXP
+# Expected percentage of doorstep interviews
+# Doorstep Interview response rate = 75%
+# tab_smp[, DSPCT_EXP := 75]
+# We expect this to be similar to the BQ language barrier rate in
+# the Main Study sample design summary, which is 0.5% instead of 75%.
+tab_smp[, DSPCT_EXP := 0.5]
 
 # REGION1_EXP
 # Expected proportion in Region 1
@@ -102,7 +116,6 @@ tab_smp[, .(SPSCR_EXP)]
 # N
 # Required. REGION1_EXP through REGION25_EXP must sum to 1.
 # Region numbers must correspond to those in the SCF.
-
 tab_reg <- frame[, .(reg_stat_kods, reg_nuts3_kods, reg_nuts3_nosauk)] |>
   unique()
 setorder(tab_reg)
@@ -172,6 +185,14 @@ tab_reg
 tab_stat_reg <- stat_iedz[, .(n = sum(value)), keyby = .(area)]
 tab_stat_reg[, p := prop.table(n)]
 tab_stat_reg
+
+tab <- sampl[sample_du == 1, .(n_pop = sum(1 / PROB_PSU / PROB_HH), n_sam = .N),
+             keyby = .(reg_stat_kods)]
+tab[, .(reg_stat_kods, P = prop.table(n_pop), p = prop.table(n_sam))]
+
+tab <- cbind(tab_stat_reg, tab)
+tab[, av_pers := n / n_pop]
+tab
 
 varnames <- grep("^REGION[0-9]+_EXP$", names(tab_smp), value = T)
 
@@ -356,14 +377,13 @@ rm(varnames, x)
 # Required; ISO language codes.
 
 varnames <- grep("^LANG[0-9]+_NAME$", names(tab_smp), value = T)
-x <- c("lav", "rus", rep("", length(varnames) - 2))
+x <- c("lav-LVA", "rus-LVA", rep("", length(varnames) - 2))
 
-tab_smp[, c(varnames[1]), with = F]
-
+# tab_smp[, c(varnames[1]), with = F]
 for (i in seq_along(varnames)) {
   set(x = tab_smp, i = NULL, j = varnames[i], value = x[i])
 }
-
+tab_smp[, ..varnames]
 
 # F1 variables - keep default values
 tab_smp[, F1_NH := .608]
@@ -389,7 +409,8 @@ tab_smp[, F2_OT := round(.235 * .8375, 3)]
 tab_smp[, F2_AP := round(.848 * .8375, 3)]
 tab_smp[, F2_IL := round(.100 * .8375, 3)]
 tab_smp[, F2_NW := round(.800 * .8375, 3)]
-tab_smp[, F2_SP_SCR := round(1.060 * .8375, 3)]
+# tab_smp[, F2_SP_SCR := round(1.060 * .8375, 3)]
+tab_smp[, F2_SP_SCR := round(SPSCR_EXP, 3)]
 tab_smp[, F2_BQ_EX := round(.980 * .8375, 3)]
 
 
@@ -410,6 +431,7 @@ sampl[sample_ft == 1 & between(SUBSAMP, 1, 1), .N]
 
 r <- sampl[sample_ft == 1 & between(SUBSAMP, 1, 1), .N] /
   sampl[sample_du == 1 & between(SUBSAMP, 1, 5), .N]
+r
 
 tab_smp_ft[, ..varnames]
 tab_smp_ft[, lapply(.SD, \(x) round(x * r)), .SDcols = varnames]
