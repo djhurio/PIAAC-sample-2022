@@ -340,9 +340,9 @@ dat[, SMPFLG1 := 1L]
 # 
 # EXCFRM_PROP:
 # Proportion in target population who are excluded from the sampling frame
-# dat[sample_du == 1, EXCFRM_PROP := 0.0061]
-# dat[sample_ft == 1, EXCFRM_PROP := 0]
-dat[, EXCFRM_PROP := 0.0061]
+dat[sample_du == 1, EXCFRM_PROP := 0.0061]
+dat[sample_ft == 1, EXCFRM_PROP := 0]
+# dat[, EXCFRM_PROP := 0.0061]
 
 
 # REGION

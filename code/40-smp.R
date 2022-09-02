@@ -45,11 +45,33 @@ tab_smp[, CNTRYID := 428L]
 # Required; 1: Population registry, 2: Screener
 tab_smp[, DSGN := 2L]
 
+
+# Response rates ####
+
 # SCRRR_EXP
 # Expected screener response rate
 # Screener response rate = 75%
 # Between 0 and 100.
 tab_smp[, SCRRR_EXP := 75]
+
+# BQRR_EXP
+# Expected BQ response rate
+# BQ response rate among those without a language barrier = 66.7%
+tab_smp[, BQRR_EXP := 66.7]
+
+# MAINRR_EXP
+# Expected assessment response rate
+# Assessment response rate = 80%
+tab_smp[, MAINRR_EXP := 80]
+
+# DSPCT_EXP
+# Expected percentage of doorstep interviews
+# Doorstep Interview response rate = 75%
+# tab_smp[, DSPCT_EXP := 75]
+# We expect this to be similar to the BQ language barrier rate in
+# the Main Study sample design summary, which is 0.5% instead of 75%.
+tab_smp[, DSPCT_EXP := 0.5]
+
 
 # SCR_EXP
 # Expected number of completed screeners
@@ -60,22 +82,22 @@ tab_smp[, SCRRR_EXP := 75]
 # expected Screener eligibility rate *
 # expected Screener response rate.
 sampl[sample_du == 1 & SUBSAMP < 6, .N]
-tab_smp[, SCR_EXP := round(sampl[sample_du == 1 & SUBSAMP < 6, .N] * 0.96 *
-                             SCRRR_EXP / 100)]
+tab_smp[, SCR_EXP := round(
+  sampl[sample_du == 1 & SUBSAMP < 6, .N] * 96 / 100 * SCRRR_EXP / 100
+)]
 tab_smp[, .(SCR_EXP)]
 
-# BQRR_EXP
-# Expected BQ response rate
-# BQ response rate among those without a language barrier = 66.7%
-tab_smp[, BQRR_EXP := 66.7]
 
 # SPSCR_EXP
 # Expected number of sampled persons per screener complete
 # Randomly select 1 person for household sizes up to 3 persons (including 3),
 # otherwise 2 persons, international CMS will be used
-frame[, .N, keyby = .(pers_sk_16_65)][, sum(N * (1 + (pers_sk_16_65 > 3))) / sum(N)]
+frame[
+  , .N, keyby = .(pers_sk_16_65)
+][, round(sum(N * (1 + (pers_sk_16_65 > 3))) / sum(N), 3)]
 tab_smp[, SPSCR_EXP := frame[, round(mean(1 + (pers_sk_16_65 > 3)), 3)]]
 tab_smp[, .(SPSCR_EXP)]
+
 
 # BQ_EXP
 # Expected number of completed BQs (full BQ or doorstep interview)
@@ -85,30 +107,25 @@ tab_smp[, .(SPSCR_EXP)]
 tab_smp[, BQ_EXP := round(SCR_EXP * BQRR_EXP / 100 * SPSCR_EXP)]
 tab_smp[, .(BQ_EXP)]
 
-# CC_EXP
-# Target number of completed cases
-# Expected number of completed cases: 7692
-tab_smp[, CC_EXP := 7692L]
-
-# MAINRR_EXP
-# Expected assessment response rate
-# Assessment response rate = 80%
-tab_smp[, MAINRR_EXP := 80]
 
 # MAIN_EXP
 # Target number of completed assessments
 # PIAAC Standard minimum number of completed assessments: 5000
 # tab_smp[, MAIN_EXP := 5000L]
-tab_smp[, MAIN_EXP := round(CC_EXP * MAINRR_EXP / 100)]
+# tab_smp[, MAIN_EXP := round(CC_EXP * MAINRR_EXP / 100)]
+# Since MAINRR_EXP is conditional on BQ completes,
+# it should be BQ_EXP * MAINRR_EXP.
+tab_smp[, MAIN_EXP := round(BQ_EXP * MAINRR_EXP / 100)]
 tab_smp[, .(MAIN_EXP)]
 
-# DSPCT_EXP
-# Expected percentage of doorstep interviews
-# Doorstep Interview response rate = 75%
-# tab_smp[, DSPCT_EXP := 75]
-# We expect this to be similar to the BQ language barrier rate in
-# the Main Study sample design summary, which is 0.5% instead of 75%.
-tab_smp[, DSPCT_EXP := 0.5]
+
+# CC_EXP
+# Target number of completed cases
+# Expected number of completed cases: 7692
+tab_smp[, CC_EXP := 7692L]
+
+
+# Population distribution ########################
 
 # REGION1_EXP
 # Expected proportion in Region 1
