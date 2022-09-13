@@ -411,8 +411,10 @@ tab_smp[, F1_IL := .265]
 tab_smp[, F1_LO := .265]
 tab_smp[, F1_OT := .265]
 tab_smp[, F1_AP := .744]
-tab_smp[, F1_NW := .650]
-tab_smp[, F1_NW_OCC := .858]
+# tab_smp[, F1_NW := .650]
+# tab_smp[, F1_NW_OCC := .858]
+tab_smp[, F1_NW := .75] # according to the "MS Sample Design Summary"
+tab_smp[, F1_NW_OCC := .96] # according to the "MS Sample Design Summary"
 
 # F2 variable - multiply default with .8375
 # For example F2_CB = .53 * .8375 = .4444
