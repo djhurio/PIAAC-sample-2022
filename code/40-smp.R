@@ -430,7 +430,8 @@ tab_smp[, F2_IL := round(.100 * .8375, 3)]
 tab_smp[, F2_NW := round(.800 * .8375, 3)]
 # tab_smp[, F2_SP_SCR := round(1.060 * .8375, 3)]
 tab_smp[, F2_SP_SCR := round(SPSCR_EXP, 3)]
-tab_smp[, F2_BQ_EX := round(.980 * .8375, 3)]
+# tab_smp[, F2_BQ_EX := round(.980 * .8375, 3)]
+tab_smp[, F2_BQ_EX := .8] # according to the "MS Sample Design Summary"
 
 
 # FT
