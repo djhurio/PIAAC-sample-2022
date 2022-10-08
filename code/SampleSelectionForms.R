@@ -16,8 +16,12 @@ tab_strata <- fread(file = "tables/sample-alloc.csv")
 frame_psu <- fread(file = "data/frame_psu.csvy", yaml = T)
 frame_du  <- fread(file = "data/frame_piaac_sampled.csvy.gz", yaml = T)
 dat <- fread("data/sample_piaac.csvy", yaml = T)
-dat_scf <- fread("data/sample_piaac_scf.csvy", yaml = T)
+dat_scf <- fread("data/sample_piaac_scf.csv")
 
+
+# dat_scf[, .N, keyby = .(REGION)]
+# dat_scf[, .N, keyby = .(JURISDICTION)]
+# dat_scf[, .N, keyby = .(URBRUR)]
 
 
 # File: SampleSelectionForm_SS_2_PSU_LVA.xlsx

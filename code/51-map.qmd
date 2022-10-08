@@ -1,0 +1,41 @@
+---
+title: "LV PIAAC 2022 izlases 1. apakšizlase"
+date: now
+format:
+  html:
+    self-contained: true
+    page-layout: full
+---
+
+```{r}
+#| echo: false
+
+library(data.table)
+library(leaflet)
+library(leaflet.extras)
+
+# Sample file from client
+dat_sample <- openxlsx::read.xlsx("../test/sample_piaac_fw_6OKT2022.xlsx")
+setDT(dat_sample)
+
+# dat_sample[, .N, keyby = .(SUBSAMP)]
+
+# Map
+map_data <- dat_sample[sample_du == 1 & SUBSAMP == 1, .(
+  n = .N,
+  popup_label = paste0("ID_PSU = ", ID_PSU, "<br>",
+                       "n = ", .N, "<br>",
+                       paste(adrese_ir, collapse = "<br>"))
+), keyby = .(ID_PSU, lon, lat)]
+
+# map_data[, sum(n)]
+
+leaflet(data = map_data) %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  addFullscreenControl() %>%
+  addCircleMarkers(lng = ~lon,
+                   lat = ~lat,
+                   popup = ~popup_label,
+                   stroke = T,
+                   clusterOptions = markerClusterOptions())
+```
