@@ -105,6 +105,12 @@ dat[, PROB_HH_FT := NULL]
 
 # Different values of PROB_HH dependeing on release of reserve sample
 dat[, .N, keyby = .(SUBSAMP)]
+
+# SUBSAMP correction
+dat[SUBSAMP < 3, SUBSAMP := 1L]
+dat[SUBSAMP > 2, SUBSAMP := SUBSAMP - 2L]
+dat[, .N, keyby = .(SUBSAMP)]
+
 val <- dat[, sort(unique(SUBSAMP))]
 
 dat[sample_du == 1, paste0("PROB_HH", val) := lapply(
@@ -115,7 +121,7 @@ dat[sample_du == 1, paste0("PROB_HH", val) := lapply(
 dat[sample_du == 1, .SD, .SDcols = patterns("PROB_HH")]
 dat[sample_du == 1][ID_PSU == first(ID_PSU), .SD, .SDcols = patterns("PROB_HH")]
 
-dat[sample_du == 1, all.equal(PROB_HH, PROB_HH10)]
+dat[sample_du == 1, all.equal(PROB_HH, PROB_HH8)]
 
 dat[sample_du == 1, lapply(.SD, \(x) sum((1 / PROB_PSU / x)[x > 0])),
     .SDcols = patterns("PROB_HH")]
@@ -340,7 +346,8 @@ dat[, SMPFLG1 := 1L]
 # 
 # EXCFRM_PROP:
 # Proportion in target population who are excluded from the sampling frame
-dat[sample_du == 1, EXCFRM_PROP := 0.0061]
+# dat[sample_du == 1, EXCFRM_PROP := 0.0061]
+dat[sample_du == 1, EXCFRM_PROP := 0.015] # from MS sample design summary
 dat[sample_ft == 1, EXCFRM_PROP := 0]
 # dat[, EXCFRM_PROP := 0.0061]
 
