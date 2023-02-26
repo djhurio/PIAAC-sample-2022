@@ -784,5 +784,9 @@ dat_sdif[, paste(round(range(AREAVAR10), 3), collapse = "-")] |> cat("\n")
 dat[, .N, keyby = .(reg_stat_kods, reg_stat_nosauk)]$reg_stat_nosauk |>
   paste(collapse = "\n") |> cat()
 
-dat[, .N, keyby = .(STRAT_PSU, psu_cert, strata2019 = substr(iec), reg_stat_kods)]
 
+# Save
+
+fwrite(x = dat_sdif, file = "data2/sample_piaac_sdif.csv",  yaml = F)
+fwrite(x = dat_sdif, file = "data2/sample_piaac_sdif.csvy", yaml = T)
+openxlsx::write.xlsx(x = dat_sdif, file = "data2/sample_piaac_sdif.xlsx", overwrite = T)
