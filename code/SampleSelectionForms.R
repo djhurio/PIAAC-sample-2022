@@ -48,6 +48,7 @@ tab <- tab_strata[, .(paste(STRAT_PSU, label, sep = ": "))]
 
 tab[, paste(V1, collapse = "; ")] |> cat()
 
+tab_strata[, paste(label, collapse = "\n")] |> cat()
 
 # Table 11.
 tab_psu_cert <- frame_psu[(psu_cert), .(STRAT_PSU, ID_PSU, psu_mos)]
