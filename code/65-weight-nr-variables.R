@@ -7,6 +7,7 @@ rm(list = ls())
 library(data.table)
 library(pxweb)
 library(sf)
+library(ggplot2)
 
 
 # Apkaimes
@@ -128,14 +129,31 @@ dat_sdif <- fread(file = "data/sample_piaac_sdif.csv",
 # SDIF variables
 dat_sdif[, .(STRAT_PSU, SORT_PSU, SORT_HH)]
 
+# STRAT_PSU N5
+# SORT_PSU  N5
+# SORT_HH   N5
+
 # Dwelling Unit (DU)-Level Variables for UNKNOWN ELIGIBILITY AND NONRESPONSE Adjustment
 
 # Number of declared residents
 dat[, DUVAR_ALL1 := pers_sk]
 dat[, range(DUVAR_ALL1)]
 
+# DUVAR_ALL N2
+dat[DUVAR_ALL1 > 99, .(DUVAR_ALL1)]
+dat[DUVAR_ALL1 > 99,   DUVAR_ALL1 := 99L]
+dat[DUVAR_ALL1 > 99, .(DUVAR_ALL1)]
+dat[, range(DUVAR_ALL1)]
+
+
 # Number of declared residents aged 16-65
 dat[, DUVAR_ALL2 := pers_sk_16_65]
+dat[, range(DUVAR_ALL2)]
+
+# DUVAR_ALL N2
+dat[DUVAR_ALL2 > 99, .(DUVAR_ALL2)]
+dat[DUVAR_ALL2 > 99,   DUVAR_ALL2 := 99L]
+dat[DUVAR_ALL2 > 99, .(DUVAR_ALL2)]
 dat[, range(DUVAR_ALL2)]
 
 dat_sdif <- merge(dat_sdif, dat[, .(CASEID, DUVAR_ALL1, DUVAR_ALL2)],
@@ -149,7 +167,7 @@ dat_sdif[, .(REGION)]
 dat_sdif[, AREAVAR1 := REGION]
 
 # JURISDICTION
-dat[, AREAVAR2 := adm_terit_kods]
+dat[, AREAVAR2 := as.integer(adm_terit_kods)]
 dat_sdif <- merge(dat_sdif, dat[, .(CASEID, AREAVAR2)],
                   by = "CASEID", all.x = T)
 
@@ -288,10 +306,38 @@ dat <- merge(
 rm(dat_AREAVAR5)
 
 dat[!is.na(AREAVAR5_ter)]
-dat[, AREAVAR5 := fifelse(is.na(AREAVAR5_ter), AREAVAR5_adm, AREAVAR5_ter)]
+dat[, AREAVAR5_val := fifelse(is.na(AREAVAR5_ter), AREAVAR5_adm, AREAVAR5_ter)]
 dat[!is.na(AREAVAR5_ter)]
 
 dat[, c("AREAVAR5_adm", "AREAVAR5_ter") := NULL]
+
+
+# Function to categorise or recode to N2 format
+categorise <- function(x, n = 100L) {
+  cut(x = x, breaks = n, labels = FALSE, right = FALSE) - 1L
+}
+
+# Pretty range
+prettyRange <- function(x, fmt = "%.3f") {
+  paste0("[", paste(sprintf(fmt = fmt, range(x)), collapse = ";"), "]")
+}
+
+# Copy table
+copy.table <- function(x) {
+  tab <- dat[, .(label = prettyRange(get(paste0(x, "_val")))), keyby = x]
+  print(tab)
+  clipr::write_clip(content = tab, col.names = FALSE)
+}
+
+dat[, AREAVAR5 := categorise(AREAVAR5_val)]
+dat[, .N, keyby = .(AREAVAR5)][, P := round(N / sum(N), 2)][]
+dat[, cor(AREAVAR5_val, AREAVAR5)]
+
+# dat[, .(label = prettyRange(AREAVAR5)), keyby = "AREAVAR5"]
+# dat[, .(label = prettyRange(get("AREAVAR5"))), keyby = "AREAVAR5"]
+
+copy.table("AREAVAR5")
+
 
 
 # Share of population aged 15 and over with upper secondary education or higher (ISCED 3-8) by cities, towns, rural territories and neighbourhoods
@@ -382,9 +428,14 @@ dat <- merge(dat, dat_AREAVAR6_ter, by = "atvk",     all.x = T, sort = F)
 dat <- merge(dat, dat_AREAVAR6_apk, by = "apk_kods", all.x = T, sort = F)
 rm(dat_AREAVAR6, dat_AREAVAR6_apk, dat_AREAVAR6_ter)
 
-dat[, AREAVAR6 := fifelse(is.na(AREAVAR6_apk), AREAVAR6_ter, AREAVAR6_apk)]
+dat[, AREAVAR6_val := fifelse(is.na(AREAVAR6_apk), AREAVAR6_ter, AREAVAR6_apk)]
 dat[, c("AREAVAR6_ter", "AREAVAR6_apk") := NULL]
-dat[, as.list(summary(AREAVAR6))]
+dat[, as.list(summary(AREAVAR6_val))]
+
+dat[, AREAVAR6 := categorise(AREAVAR6_val)]
+dat[, .N, keyby = .(AREAVAR6)][, P := round(prop.table(N), 3)][]
+dat[, cor(AREAVAR6_val, AREAVAR6)]
+copy.table("AREAVAR6")
 
 
 # Share of owner occupied dwellings by JURISDICTION
@@ -474,9 +525,16 @@ rm(dat_AREAVAR7, dat_AREAVAR7_apk, dat_AREAVAR7_ter)
 
 dat[is.na(AREAVAR7_ter)]
 
-dat[, AREAVAR7 := fifelse(is.na(AREAVAR7_apk), AREAVAR7_ter, AREAVAR7_apk)]
+dat[, AREAVAR7_val := fifelse(is.na(AREAVAR7_apk), AREAVAR7_ter, AREAVAR7_apk)]
 dat[, c("AREAVAR7_ter", "AREAVAR7_apk") := NULL]
-dat[, as.list(summary(AREAVAR7))]
+dat[, as.list(summary(AREAVAR7_val))]
+
+
+dat[, .N, keyby = .(AREAVAR7_val)][, P := round(prop.table(N), 3)][]
+dat[, AREAVAR7 := categorise(AREAVAR7_val)]
+dat[, .N, keyby = .(AREAVAR7)][, P := round(prop.table(N), 3)][]
+dat[, cor(AREAVAR7_val, AREAVAR7)]
+copy.table("AREAVAR7")
 
 
 # Share of occupied dwellings by JURISDICTION
@@ -579,9 +637,15 @@ rm(dat_AREAVAR8, dat_AREAVAR8_apk, dat_AREAVAR8_ter)
 
 dat[is.na(AREAVAR8_ter)]
 
-dat[, AREAVAR8 := fifelse(is.na(AREAVAR8_apk), AREAVAR8_ter, AREAVAR8_apk)]
+dat[, AREAVAR8_val := fifelse(is.na(AREAVAR8_apk), AREAVAR8_ter, AREAVAR8_apk)]
 dat[, c("AREAVAR8_ter", "AREAVAR8_apk") := NULL]
-dat[, as.list(summary(AREAVAR8))]
+dat[, as.list(summary(AREAVAR8_val))]
+
+dat[, AREAVAR8 := categorise(AREAVAR8_val)]
+dat[, .N, keyby = .(AREAVAR8)][, P := round(prop.table(N), 3)][]
+dat[, cor(AREAVAR8_val, AREAVAR8)]
+copy.table("AREAVAR8")
+
 
 
 # Share of citizens of Latvia by cities, towns, rural territories and neighbourhoods
@@ -673,9 +737,14 @@ dat <- merge(dat, dat_AREAVAR9_ter, by = "atvk_2021", all.x = T, sort = F)
 dat <- merge(dat, dat_AREAVAR9_apk, by = "apk_kods",  all.x = T, sort = F)
 rm(dat_AREAVAR9, dat_AREAVAR9_apk, dat_AREAVAR9_ter)
 
-dat[, AREAVAR9 := fifelse(is.na(AREAVAR9_apk), AREAVAR9_ter, AREAVAR9_apk)]
+dat[, AREAVAR9_val := fifelse(is.na(AREAVAR9_apk), AREAVAR9_ter, AREAVAR9_apk)]
 dat[, c("AREAVAR9_ter", "AREAVAR9_apk") := NULL]
-dat[, as.list(summary(AREAVAR9))]
+dat[, as.list(summary(AREAVAR9_val))]
+
+dat[, AREAVAR9 := categorise(AREAVAR9_val)]
+dat[, .N, keyby = .(AREAVAR9)][, P := round(prop.table(N), 3)][]
+dat[, cor(AREAVAR9_val, AREAVAR9)]
+copy.table("AREAVAR9")
 
 
 # Share of one person households by JURISDICTION
@@ -751,10 +820,15 @@ dat <- merge(
 rm(dat_AREAVAR10)
 
 dat[!is.na(AREAVAR10_ter)]
-dat[, AREAVAR10 := fifelse(is.na(AREAVAR10_ter), AREAVAR10_adm, AREAVAR10_ter)]
+dat[, AREAVAR10_val := fifelse(is.na(AREAVAR10_ter), AREAVAR10_adm, AREAVAR10_ter)]
 dat[!is.na(AREAVAR10_ter)]
 
 dat[, c("AREAVAR10_adm", "AREAVAR10_ter") := NULL]
+
+dat[, AREAVAR10 := categorise(AREAVAR10_val)]
+dat[, .N, keyby = .(AREAVAR10)][, P := round(prop.table(N), 3)][]
+dat[, cor(AREAVAR10_val, AREAVAR10)]
+copy.table("AREAVAR10")
 
 
 # Add to SDIF
@@ -772,7 +846,7 @@ dat_sdif[, .N, keyby = .(AREAVAR4)]
 dat_sdif[, .N, keyby = .(AREAVAR3, AREAVAR4)]
 
 dat_sdif[, paste(range(SORT_PSU), collapse = "-")] |> cat("\n")
-dat_sdif[, paste(range(SORT_HH), collapse = "-")] |> cat("\n")
+dat_sdif[, paste(range(SORT_HH),  collapse = "-")] |> cat("\n")
 
 dat_sdif[, paste(round(range(AREAVAR5),  3), collapse = "-")] |> cat("\n")
 dat_sdif[, paste(round(range(AREAVAR6),  3), collapse = "-")] |> cat("\n")
@@ -785,8 +859,13 @@ dat[, .N, keyby = .(reg_stat_kods, reg_stat_nosauk)]$reg_stat_nosauk |>
   paste(collapse = "\n") |> cat()
 
 
+dat[order(AREAVAR2), .(AREAVAR2, adm_terit_nosauk)] |> unique() |>
+  clipr::write_clip(col.names = FALSE)
+
+
 # Save
 
 fwrite(x = dat_sdif, file = "data2/sample_piaac_sdif.csv",  yaml = F)
 fwrite(x = dat_sdif, file = "data2/sample_piaac_sdif.csvy", yaml = T)
-openxlsx::write.xlsx(x = dat_sdif, file = "data2/sample_piaac_sdif.xlsx", overwrite = T)
+openxlsx::write.xlsx(x = dat_sdif, file = "data2/sample_piaac_sdif.xlsx",
+                     overwrite = T)
