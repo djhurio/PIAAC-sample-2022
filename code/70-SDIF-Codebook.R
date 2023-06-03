@@ -10,6 +10,8 @@ sample_piaac_sdif[, .N, keyby = .(SORT_HH)]
 
 sample_piaac_sdif[, .N, keyby = .(REGION)]
 
+sample_piaac_sdif[, .N, keyby = .(SUBSAMP)]
+
 
 sample_piaac_scf <- fread(file = "data/sample_piaac_scf.csv")
 
