@@ -2,6 +2,14 @@
 
 # Reset
 rm(list = ls())
+gc()
+source(".Rprofile")
+
+# Env
+Sys.getenv("DISPLAY")
+Sys.setenv("DISPLAY" = ":0.0")
+Sys.getenv("DISPLAY")
+clipr::clipr_available()
 
 # Packages
 library(data.table)
@@ -26,6 +34,15 @@ shp_atvk_2021
 shp_atvk_2021[c("L1_code", "geometry")] |> plot()
 shp_atvk_2021[c("L0_code", "geometry")] |> plot()
 st_crs(shp_atvk_2021)
+
+# ATVK on 2022-07-01
+# https://data.gov.lv/dati/dataset/robezas
+# https://data.gov.lv/dati/dataset/robezas/resource/d09c36c8-bcb2-4429-b88f-3a08d79c6aab
+shp_atvk_2022 <- read_sf(dsn = "Territorial_units_LV_1.2m_(2022.07.01.)")
+shp_atvk_2022
+shp_atvk_2022[c("L1_code", "geometry")] |> plot()
+shp_atvk_2022[c("L0_code", "geometry")] |> plot()
+st_crs(shp_atvk_2022)
 
 
 # Load sample file
@@ -66,17 +83,31 @@ dat[, atvk_2021           := dat_atvk_2021$L1_code]
 dat[, adm_terit_kods_2021 := dat_atvk_2021$L0_code]
 rm(dat_atvk_2021)
 
+# ATVK 2022
+dat_atvk_2022 <- st_join(x = dat_sf, y = shp_atvk_2022,
+                         join = st_nearest_feature)
+dat[, atvk_2022           := dat_atvk_2022$L1_code]
+dat[, adm_terit_kods_2022 := dat_atvk_2022$L0_code]
+rm(dat_atvk_2022)
+
+dat[grep("Ķekava|Mārupe", atvk_nosauk), .N,
+    keyby = .(atvk, atvk_nosauk, atvk_2021, atvk_2022)]
+
 dat[is.na(atvk_2021), .(atvk_nosauk, paste(lat, lon, sep = ","))]
 dat[is.na(atvk_2021), .(adrese_ir, paste(lks92x, lks92y, sep = ","))]
-
 dat[is.na(adm_terit_kods_2021), .(atvk_nosauk, paste(lat, lon, sep = ","))]
 dat[is.na(adm_terit_kods_2021), .(adrese_ir, paste(lks92x, lks92y, sep = ","))]
 
-# dat[, .N, keyby = .(adm_terit_kods, adm_terit_kods_2021)] |> View()
-dat[, .N, keyby = .(adm_terit_kods)]
-dat[, .N, keyby = .(adm_terit_kods_2021)]
+dat[is.na(atvk_2022), .(atvk_nosauk, paste(lat, lon, sep = ","))]
+dat[is.na(atvk_2022), .(adrese_ir, paste(lks92x, lks92y, sep = ","))]
+dat[is.na(adm_terit_kods_2022), .(atvk_nosauk, paste(lat, lon, sep = ","))]
+dat[is.na(adm_terit_kods_2022), .(adrese_ir, paste(lks92x, lks92y, sep = ","))]
 
-# stop()
+# dat[, .N, keyby = .(adm_terit_kods, adm_terit_kods_2021)] |> View()
+dat[, .N, keyby = .(adm_terit_kods_2021)]
+dat[, .N, keyby = .(adm_terit_kods)]
+dat[, .N, keyby = .(adm_terit_kods_2022)]
+
 
 # Add apkaimes
 atvk_with_apk <- c("0001000", "0054010") # Rīga un Valmiera
@@ -167,13 +198,52 @@ dat_sdif[, .(REGION)]
 dat_sdif[, AREAVAR1 := REGION]
 
 # JURISDICTION
-dat[, AREAVAR2 := as.integer(adm_terit_kods)]
+# We recently found out that one of the software packages we use for the weighting process cannot handle unordered categorical variables with over 30 categories.
+# According to your preliminary SDIF codebook, one of the weighting variables (AREAVAR2) contains 43 jurisdictions.
+# Could you please combine the categories so that it contains no more than 30 categories in the final SDIF?
+
+tab_adm_terit <- dat_frame[, .(n = .N),
+                           keyby = .(reg_stat_kods, reg_stat_nosauk,
+                                     adm_terit_kods, adm_terit_nosauk)]
+setorder(tab_adm_terit, -n)
+tab_adm_terit[, small := .I > 30]
+
+setorder(tab_adm_terit, reg_stat_kods, -n)
+tab_adm_terit[, merge := small | (any(small) & n == last(n[!small])),
+              by = .(reg_stat_kods)]
+
+tab_adm_terit[, .(reg_stat_nosauk, adm_terit_nosauk, n, small, merge)]
+tab_adm_terit[, .(reg_stat_kods, adm_terit_kods)]
+
+tab_adm_terit[, reg_label := paste(sub(" .*$", "", reg_stat_nosauk), "reg.")]
+
+tab_adm_terit[, AREAVAR2 := cumsum(!small)]
+tab_adm_terit[, AREAVAR2_label := ifelse(
+  test = !merge,
+  yes = paste(reg_label, adm_terit_nosauk),
+  no = paste(reg_label, "other")
+)]
+
+tab_adm_terit_min <- tab_adm_terit[, .(adm_terit_kods, AREAVAR2)]
+tab_AREAVAR2 <- tab_adm_terit[, .(AREAVAR2, AREAVAR2_label)] |> unique()
+openxlsx::write.xlsx(
+  x = tab_AREAVAR2,
+  file = "tables/tab_AREAVAR2.xlsx",
+  colWidths = "auto"
+)
+
+# dat[, AREAVAR2 := as.integer(adm_terit_kods)]
+
+dat <- merge(dat, tab_adm_terit_min, by = "adm_terit_kods", all.x = T, sort = F)
+dat[, .N, keyby = .(AREAVAR2)]
+
 dat_sdif <- merge(dat_sdif, dat[, .(CASEID, AREAVAR2)],
                   by = "CASEID", all.x = T)
 
 # URBRUR
 dat_sdif[, .(URBRUR)]
 dat_sdif[, AREAVAR3 := URBRUR]
+dat_sdif[, .N, keyby = .(AREAVAR3)]
 
 # DEGURBA
 # https://ec.europa.eu/eurostat/web/degree-of-urbanisation/methodology
@@ -200,6 +270,7 @@ rm(dat_degurba)
 
 dat[, AREAVAR4 := DEGURBA]
 dat[, .(CASEID, AREAVAR4)]
+dat[, .N, keyby = .(AREAVAR4)]
 
 dat[, .N, keyby = .(DEGURBA, adm_terit_kods, adm_terit_nosauk)]
 
@@ -258,7 +329,7 @@ dat_AREAVAR5 <- pxweb_get_data(
                     x = api_meta$variables[[5]]$values,
                     value = T),
     ContentsCode = "EKA011",
-    TIME = "2021")),
+    TIME = "2022")),
   column.name.type = "code",
   variable.value.type = "code"
 )
@@ -365,7 +436,7 @@ api_meta$variables[[3]]$values
 api_meta$variables[[4]]$code
 api_meta$variables[[4]]$values
 
-dat_AREAVAR6 <- pxweb_get(
+dat_PERSVAR2 <- pxweb_get(
   url = api_url,
   query = pxweb_query(x = list(
     EDUCATION_LEVEL = "*",
@@ -373,70 +444,73 @@ dat_AREAVAR6 <- pxweb_get(
                 x = api_meta$variables[[2]]$values,
                 value = T),
     ContentsCode = "IZT041",
-    TIME = "2021"))
+    TIME = "2022"))
 )
 
-dat_AREAVAR6$columns
+dat_PERSVAR2$columns
 col_names <- purrr::map_chr(
-  .x = dat_AREAVAR6$columns,
+  .x = dat_PERSVAR2$columns,
   .f = \(x) x$code
 ) |> tolower()
 col_names[length(col_names)] <- "value"
 col_names
 
-dat_AREAVAR6 <- purrr::map(
-  .x = dat_AREAVAR6$data,
+dat_PERSVAR2 <- purrr::map(
+  .x = dat_PERSVAR2$data,
   .f = \(x) c(x$key, x$values)
 ) |> rbindlist()
-setDT(dat_AREAVAR6)
-setnames(dat_AREAVAR6, col_names)
-dat_AREAVAR6
+setDT(dat_PERSVAR2)
+setnames(dat_PERSVAR2, col_names)
+dat_PERSVAR2
 
-dat_AREAVAR6[, .N, keyby = .(value)]
+dat_PERSVAR2[, .N, keyby = .(value)]
 # Non numeric values
-dat_AREAVAR6[!grep("^[0-9]+$", value), .N, keyby = .(value)]
-dat_AREAVAR6[dat_AREAVAR6[grep("\\(.*\\)", value), .(area)], on = "area"]
-dat_AREAVAR6[!grep("^[0-9]+$", value), value := NA]
-dat_AREAVAR6[, value := as.integer(value)]
+dat_PERSVAR2[!grep("^[0-9]+$", value), .N, keyby = .(value)]
+dat_PERSVAR2[dat_PERSVAR2[grep("\\(.*\\)", value), .(area)], on = "area"]
+dat_PERSVAR2[!grep("^[0-9]+$", value), value := NA]
+dat_PERSVAR2[, value := as.integer(value)]
 
-dat_AREAVAR6[, .N, keyby = .(education_level)]
-dat_AREAVAR6[grep("^ED[02]",  education_level), education_level := "ED0_2"]
-dat_AREAVAR6[grep("^ED[345]", education_level), education_level := "ED3_8"]
-dat_AREAVAR6[, .N, keyby = .(education_level)]
+dat_PERSVAR2[, .N, keyby = .(education_level)]
+dat_PERSVAR2[grep("^ED[02]",  education_level), education_level := "ED0_2"]
+dat_PERSVAR2[grep("^ED[345]", education_level), education_level := "ED3_8"]
+dat_PERSVAR2[, .N, keyby = .(education_level)]
 
-dat_AREAVAR6 <- dcast.data.table(data = dat_AREAVAR6,
+dat_PERSVAR2 <- dcast.data.table(data = dat_PERSVAR2,
                                  formula = area ~ education_level,
                                  fun.aggregate = sum,
                                  value.var = "value")
 
-dat_AREAVAR6[, AREAVAR6 := ED3_8 / TOTAL]
-dat_AREAVAR6[is.na(AREAVAR6)]
+dat_PERSVAR2[, PERSVAR2 := ED3_8 / TOTAL]
+dat_PERSVAR2[is.na(PERSVAR2)]
 
-dat_AREAVAR6[, as.list(summary(AREAVAR6))]
+dat_PERSVAR2[, as.list(summary(PERSVAR2))]
 
-dat_AREAVAR6_ter <- dat_AREAVAR6[
+dat_PERSVAR2_ter <- dat_PERSVAR2[
   grep("LV[0-9]{7}", area),
-  .(atvk = substr(area, 3, 9), AREAVAR6_ter = AREAVAR6)
+  .(atvk_2022 = area, PERSVAR2_ter = PERSVAR2)
 ]
 
-dat_AREAVAR6_apk <- dat_AREAVAR6[
+dat_PERSVAR2_apk <- dat_PERSVAR2[
   grep("LV[A-Z]{3}[0-9]{2}", area),
-  .(apk_kods = area, AREAVAR6_apk = AREAVAR6)
+  .(apk_kods = area, PERSVAR2_apk = PERSVAR2)
 ]
 
-dat <- merge(dat, dat_AREAVAR6_ter, by = "atvk",     all.x = T, sort = F)
-dat <- merge(dat, dat_AREAVAR6_apk, by = "apk_kods", all.x = T, sort = F)
-rm(dat_AREAVAR6, dat_AREAVAR6_apk, dat_AREAVAR6_ter)
+# dat[, .(atvk)]
 
-dat[, AREAVAR6_val := fifelse(is.na(AREAVAR6_apk), AREAVAR6_ter, AREAVAR6_apk)]
-dat[, c("AREAVAR6_ter", "AREAVAR6_apk") := NULL]
-dat[, as.list(summary(AREAVAR6_val))]
+dat <- merge(dat, dat_PERSVAR2_ter, by = "atvk_2022", all.x = T, sort = F)
+dat <- merge(dat, dat_PERSVAR2_apk, by = "apk_kods",  all.x = T, sort = F)
+rm(dat_PERSVAR2, dat_PERSVAR2_apk, dat_PERSVAR2_ter)
 
-dat[, AREAVAR6 := categorise(AREAVAR6_val)]
-dat[, .N, keyby = .(AREAVAR6)][, P := round(prop.table(N), 3)][]
-dat[, cor(AREAVAR6_val, AREAVAR6)]
-copy.table("AREAVAR6")
+dat[, PERSVAR2_val := fifelse(is.na(PERSVAR2_apk), PERSVAR2_ter, PERSVAR2_apk)]
+dat[, c("PERSVAR2_ter", "PERSVAR2_apk") := NULL]
+dat[, as.list(summary(PERSVAR2_val))]
+dat[is.na(PERSVAR2_val)]
 
+dat[, PERSVAR2 := categorise(PERSVAR2_val)]
+dat[, .N, keyby = .(PERSVAR2)][, P := round(prop.table(N), 3)][]
+dat[, cor(PERSVAR2_val, PERSVAR2)]
+copy.table("PERSVAR2")
+# 33 + 82
 
 # Share of owner occupied dwellings by JURISDICTION
 # https://data.stat.gov.lv/pxweb/en/OSP_PUB/START__POP__MA__MAS/MAS040/
@@ -463,7 +537,7 @@ api_meta$variables[[3]]$values
 api_meta$variables[[4]]$code
 api_meta$variables[[4]]$values
 
-dat_AREAVAR7 <- pxweb_get(
+dat_PERSVAR3 <- pxweb_get(
   url = api_url,
   query = pxweb_query(x = list(
     AREA = grep(pattern = "^LV([0-9]{7}|[A-Z]{3}[0-9]{2})$",
@@ -474,67 +548,69 @@ dat_AREAVAR7 <- pxweb_get(
     TIME = "2021"))
 )
 
-dat_AREAVAR7$columns
+dat_PERSVAR3$columns
 col_names <- purrr::map_chr(
-  .x = dat_AREAVAR7$columns,
+  .x = dat_PERSVAR3$columns,
   .f = \(x) x$code
 ) |> tolower()
 col_names[length(col_names)] <- "value"
 col_names
 
-dat_AREAVAR7 <- purrr::map(
-  .x = dat_AREAVAR7$data,
+dat_PERSVAR3 <- purrr::map(
+  .x = dat_PERSVAR3$data,
   .f = \(x) c(x$key, x$values)
 ) |> rbindlist()
-setDT(dat_AREAVAR7)
-setnames(dat_AREAVAR7, col_names)
-dat_AREAVAR7
+setDT(dat_PERSVAR3)
+setnames(dat_PERSVAR3, col_names)
+dat_PERSVAR3
 
-dat_AREAVAR7[, .N, keyby = .(value)]
+dat_PERSVAR3[, .N, keyby = .(value)]
 # Non numeric values
-dat_AREAVAR7[!grep("^[0-9]+$", value), .N, keyby = .(value)]
-dat_AREAVAR7[dat_AREAVAR7[grep("\\.", value), .(area)], on = "area"]
-dat_AREAVAR7[!grep("^[0-9]+$", value), value := NA]
-dat_AREAVAR7[, value := as.integer(value)]
+dat_PERSVAR3[!grep("^[0-9]+$", value), .N, keyby = .(value)]
+dat_PERSVAR3[dat_PERSVAR3[grep("\\.", value), .(area)], on = "area"]
+dat_PERSVAR3[!grep("^[0-9]+$", value), value := NA]
+dat_PERSVAR3[, value := as.integer(value)]
 
-dat_AREAVAR7 <- dcast.data.table(
-  data = dat_AREAVAR7,
+dat_PERSVAR3 <- dcast.data.table(
+  data = dat_PERSVAR3,
   formula = area ~ ows,
   value.var = "value"
 )
 
-dat_AREAVAR7[is.na(DW_OWN)]
-dat_AREAVAR7[, lapply(.SD, sum, na.rm = T), .SDcols = patterns("DW"),
+dat_PERSVAR3[is.na(DW_OWN)]
+dat_PERSVAR3[, lapply(.SD, sum, na.rm = T), .SDcols = patterns("DW"),
              keyby = .(nchar(area))]
-dat_AREAVAR7[, AREAVAR7 := DW_OWN / DW_OC]
-dat_AREAVAR7[, summary(AREAVAR7)]
+dat_PERSVAR3[, PERSVAR3 := DW_OWN / DW_OC]
+dat_PERSVAR3[, summary(PERSVAR3)]
 
-dat_AREAVAR7_ter <- dat_AREAVAR7[
+dat_PERSVAR3_ter <- dat_PERSVAR3[
   grep("LV[0-9]{7}", area),
-  .(adm_terit_kods_2021 = area, AREAVAR7_ter = AREAVAR7)
+  .(adm_terit_kods_2021 = area, PERSVAR3_ter = PERSVAR3)
 ]
 
-dat_AREAVAR7_apk <- dat_AREAVAR7[
+dat_PERSVAR3_apk <- dat_PERSVAR3[
   grep("LV[A-Z]{3}[0-9]{2}", area),
-  .(apk_kods = area, AREAVAR7_apk = AREAVAR7)
+  .(apk_kods = area, PERSVAR3_apk = PERSVAR3)
 ]
 
-dat <- merge(dat, dat_AREAVAR7_ter, by = "adm_terit_kods_2021", all.x = T, sort = F)
-dat <- merge(dat, dat_AREAVAR7_apk, by = "apk_kods", all.x = T, sort = F)
-rm(dat_AREAVAR7, dat_AREAVAR7_apk, dat_AREAVAR7_ter)
+dat <- merge(dat, dat_PERSVAR3_ter, by = "adm_terit_kods_2021",
+             all.x = T, sort = F)
+dat <- merge(dat, dat_PERSVAR3_apk, by = "apk_kods", all.x = T, sort = F)
+rm(dat_PERSVAR3, dat_PERSVAR3_apk, dat_PERSVAR3_ter)
 
-dat[is.na(AREAVAR7_ter)]
+dat[is.na(PERSVAR3_ter)]
 
-dat[, AREAVAR7_val := fifelse(is.na(AREAVAR7_apk), AREAVAR7_ter, AREAVAR7_apk)]
-dat[, c("AREAVAR7_ter", "AREAVAR7_apk") := NULL]
-dat[, as.list(summary(AREAVAR7_val))]
+dat[, PERSVAR3_val := fifelse(is.na(PERSVAR3_apk), PERSVAR3_ter, PERSVAR3_apk)]
+dat[, c("PERSVAR3_ter", "PERSVAR3_apk") := NULL]
+dat[, as.list(summary(PERSVAR3_val))]
 
 
-dat[, .N, keyby = .(AREAVAR7_val)][, P := round(prop.table(N), 3)][]
-dat[, AREAVAR7 := categorise(AREAVAR7_val)]
-dat[, .N, keyby = .(AREAVAR7)][, P := round(prop.table(N), 3)][]
-dat[, cor(AREAVAR7_val, AREAVAR7)]
-copy.table("AREAVAR7")
+dat[, .N, keyby = .(PERSVAR3_val)][, P := round(prop.table(N), 3)][]
+dat[, PERSVAR3 := categorise(PERSVAR3_val)]
+dat[, .N, keyby = .(PERSVAR3)][, P := round(prop.table(N), 3)][]
+dat[, cor(PERSVAR3_val, PERSVAR3)]
+copy.table("PERSVAR3")
+# 115 + 60
 
 
 # Share of occupied dwellings by JURISDICTION
@@ -572,7 +648,7 @@ api_meta$variables[[6]]$code
 api_meta$variables[[6]]$values
 api_meta$variables[[6]]$valueTexts
 
-dat_AREAVAR8 <- pxweb_get(
+dat_PERSVAR4 <- pxweb_get(
   url = api_url,
   query = pxweb_query(x = list(
     AREA = grep(pattern = "^LV([0-9]{7}|[A-Z]{3}[0-9]{2})$",
@@ -585,67 +661,68 @@ dat_AREAVAR8 <- pxweb_get(
     TIME = "2021"))
 )
 
-dat_AREAVAR8$columns
+dat_PERSVAR4$columns
 col_names <- purrr::map_chr(
-  .x = dat_AREAVAR8$columns,
+  .x = dat_PERSVAR4$columns,
   .f = \(x) x$code
 ) |> tolower()
 col_names[length(col_names)] <- "value"
 col_names
 
-dat_AREAVAR8 <- purrr::map(
-  .x = dat_AREAVAR8$data,
+dat_PERSVAR4 <- purrr::map(
+  .x = dat_PERSVAR4$data,
   .f = \(x) c(x$key, x$values)
 ) |> rbindlist()
-setDT(dat_AREAVAR8)
-setnames(dat_AREAVAR8, col_names)
-dat_AREAVAR8
+setDT(dat_PERSVAR4)
+setnames(dat_PERSVAR4, col_names)
+dat_PERSVAR4
 
-dat_AREAVAR8[, .N, keyby = .(value)]
+dat_PERSVAR4[, .N, keyby = .(value)]
 # Non numeric values
-dat_AREAVAR8[!grep("^[0-9]+$", value), .N, keyby = .(value)]
-dat_AREAVAR8[dat_AREAVAR8[grep("\\(.*\\)", value), .(area)], on = "area"]
-dat_AREAVAR8[!grep("^[0-9]+$", value), value := NA]
-dat_AREAVAR8[, value := as.integer(value)]
+dat_PERSVAR4[!grep("^[0-9]+$", value), .N, keyby = .(value)]
+dat_PERSVAR4[dat_PERSVAR4[grep("\\(.*\\)", value), .(area)], on = "area"]
+dat_PERSVAR4[!grep("^[0-9]+$", value), value := NA]
+dat_PERSVAR4[, value := as.integer(value)]
 
-dat_AREAVAR8 <- dcast.data.table(
-  data = dat_AREAVAR8,
+dat_PERSVAR4 <- dcast.data.table(
+  data = dat_PERSVAR4,
   formula = area ~ ocs,
   value.var = "value"
 )
 
-dat_AREAVAR8[is.na(DW)]
-dat_AREAVAR8[is.na(DW_OC)]
-dat_AREAVAR8[, lapply(.SD, sum, na.rm = T), .SDcols = patterns("DW"),
+dat_PERSVAR4[is.na(DW)]
+dat_PERSVAR4[is.na(DW_OC)]
+dat_PERSVAR4[, lapply(.SD, sum, na.rm = T), .SDcols = patterns("DW"),
              keyby = .(nchar(area))]
-dat_AREAVAR8[, AREAVAR8 := DW_OC / DW]
-dat_AREAVAR8[, summary(AREAVAR8)]
+dat_PERSVAR4[, PERSVAR4 := DW_OC / DW]
+dat_PERSVAR4[, summary(PERSVAR4)]
 
-dat_AREAVAR8_ter <- dat_AREAVAR8[
+dat_PERSVAR4_ter <- dat_PERSVAR4[
   grep("LV[0-9]{7}", area),
-  .(adm_terit_kods_2021 = area, AREAVAR8_ter = AREAVAR8)
+  .(adm_terit_kods_2021 = area, PERSVAR4_ter = PERSVAR4)
 ]
 
-dat_AREAVAR8_apk <- dat_AREAVAR8[
+dat_PERSVAR4_apk <- dat_PERSVAR4[
   grep("LV[A-Z]{3}[0-9]{2}", area),
-  .(apk_kods = area, AREAVAR8_apk = AREAVAR8)
+  .(apk_kods = area, PERSVAR4_apk = PERSVAR4)
 ]
 
-dat <- merge(dat, dat_AREAVAR8_ter, by = "adm_terit_kods_2021", all.x = T, sort = F)
-dat <- merge(dat, dat_AREAVAR8_apk, by = "apk_kods", all.x = T, sort = F)
-rm(dat_AREAVAR8, dat_AREAVAR8_apk, dat_AREAVAR8_ter)
+dat <- merge(dat, dat_PERSVAR4_ter, by = "adm_terit_kods_2021",
+             all.x = T, sort = F)
+dat <- merge(dat, dat_PERSVAR4_apk, by = "apk_kods", all.x = T, sort = F)
+rm(dat_PERSVAR4, dat_PERSVAR4_apk, dat_PERSVAR4_ter)
 
-dat[is.na(AREAVAR8_ter)]
+dat[is.na(PERSVAR4_ter)]
 
-dat[, AREAVAR8_val := fifelse(is.na(AREAVAR8_apk), AREAVAR8_ter, AREAVAR8_apk)]
-dat[, c("AREAVAR8_ter", "AREAVAR8_apk") := NULL]
-dat[, as.list(summary(AREAVAR8_val))]
+dat[, PERSVAR4_val := fifelse(is.na(PERSVAR4_apk), PERSVAR4_ter, PERSVAR4_apk)]
+dat[, c("PERSVAR4_ter", "PERSVAR4_apk") := NULL]
+dat[, as.list(summary(PERSVAR4_val))]
 
-dat[, AREAVAR8 := categorise(AREAVAR8_val)]
-dat[, .N, keyby = .(AREAVAR8)][, P := round(prop.table(N), 3)][]
-dat[, cor(AREAVAR8_val, AREAVAR8)]
-copy.table("AREAVAR8")
-
+dat[, PERSVAR4 := categorise(PERSVAR4_val)]
+dat[, .N, keyby = .(PERSVAR4)][, P := round(prop.table(N), 3)][]
+dat[, cor(PERSVAR4_val, PERSVAR4)]
+copy.table("PERSVAR4")
+# 175 + 73
 
 
 # Share of citizens of Latvia by cities, towns, rural territories and neighbourhoods
@@ -679,7 +756,7 @@ api_meta$variables[[5]]$code
 api_meta$variables[[5]]$values
 api_meta$variables[[5]]$valueTexts
 
-dat_AREAVAR9 <- pxweb_get(
+dat_PERSVAR5 <- pxweb_get(
   url = api_url,
   query = pxweb_query(x = list(
     SEX = "T",
@@ -691,61 +768,61 @@ dat_AREAVAR9 <- pxweb_get(
     TIME = "2022"))
 )
 
-dat_AREAVAR9$columns
+dat_PERSVAR5$columns
 col_names <- purrr::map_chr(
-  .x = dat_AREAVAR9$columns,
+  .x = dat_PERSVAR5$columns,
   .f = \(x) x$code
 ) |> tolower()
 col_names[length(col_names)] <- "value"
 col_names
 
-dat_AREAVAR9 <- purrr::map(
-  .x = dat_AREAVAR9$data,
+dat_PERSVAR5 <- purrr::map(
+  .x = dat_PERSVAR5$data,
   .f = \(x) c(x$key, x$values)
 ) |> rbindlist()
-setDT(dat_AREAVAR9)
-setnames(dat_AREAVAR9, col_names)
-dat_AREAVAR9
+setDT(dat_PERSVAR5)
+setnames(dat_PERSVAR5, col_names)
+dat_PERSVAR5
 
-dat_AREAVAR9[, .N, keyby = .(value)]
+dat_PERSVAR5[, .N, keyby = .(value)]
 # Non numeric values
-dat_AREAVAR9[!grep("^[0-9]+$", value), .N, keyby = .(value)]
-dat_AREAVAR9[dat_AREAVAR9[!grep("^[0-9]+$", value), .(area)], on = "area"]
-dat_AREAVAR9[!grep("^[0-9]+$", value), value := NA]
-dat_AREAVAR9[, value := as.integer(value)]
+dat_PERSVAR5[!grep("^[0-9]+$", value), .N, keyby = .(value)]
+dat_PERSVAR5[dat_PERSVAR5[!grep("^[0-9]+$", value), .(area)], on = "area"]
+dat_PERSVAR5[!grep("^[0-9]+$", value), value := NA]
+dat_PERSVAR5[, value := as.integer(value)]
 
-dat_AREAVAR9 <- dcast.data.table(data = dat_AREAVAR9,
+dat_PERSVAR5 <- dcast.data.table(data = dat_PERSVAR5,
                                  formula = area ~ citizen,
                                  value.var = "value")
 
-dat_AREAVAR9[, AREAVAR9 := CITIZ_LV / TOTAL]
-dat_AREAVAR9[is.na(AREAVAR9)]
+dat_PERSVAR5[, PERSVAR5 := CITIZ_LV / TOTAL]
+dat_PERSVAR5[is.na(PERSVAR5)]
 
-dat_AREAVAR9[, as.list(summary(AREAVAR9))]
+dat_PERSVAR5[, as.list(summary(PERSVAR5))]
 
-dat_AREAVAR9_ter <- dat_AREAVAR9[
+dat_PERSVAR5_ter <- dat_PERSVAR5[
   grep("LV[0-9]{7}", area),
-  .(atvk_2021 = area, AREAVAR9_ter = AREAVAR9)
+  .(atvk_2021 = area, PERSVAR5_ter = PERSVAR5)
 ]
 
-dat_AREAVAR9_apk <- dat_AREAVAR9[
+dat_PERSVAR5_apk <- dat_PERSVAR5[
   grep("LV[A-Z]{3}[0-9]{2}", area),
-  .(apk_kods = area, AREAVAR9_apk = AREAVAR9)
+  .(apk_kods = area, PERSVAR5_apk = PERSVAR5)
 ]
 
-dat <- merge(dat, dat_AREAVAR9_ter, by = "atvk_2021", all.x = T, sort = F)
-dat <- merge(dat, dat_AREAVAR9_apk, by = "apk_kods",  all.x = T, sort = F)
-rm(dat_AREAVAR9, dat_AREAVAR9_apk, dat_AREAVAR9_ter)
+dat <- merge(dat, dat_PERSVAR5_ter, by = "atvk_2021", all.x = T, sort = F)
+dat <- merge(dat, dat_PERSVAR5_apk, by = "apk_kods",  all.x = T, sort = F)
+rm(dat_PERSVAR5, dat_PERSVAR5_apk, dat_PERSVAR5_ter)
 
-dat[, AREAVAR9_val := fifelse(is.na(AREAVAR9_apk), AREAVAR9_ter, AREAVAR9_apk)]
-dat[, c("AREAVAR9_ter", "AREAVAR9_apk") := NULL]
-dat[, as.list(summary(AREAVAR9_val))]
+dat[, PERSVAR5_val := fifelse(is.na(PERSVAR5_apk), PERSVAR5_ter, PERSVAR5_apk)]
+dat[, c("PERSVAR5_ter", "PERSVAR5_apk") := NULL]
+dat[, as.list(summary(PERSVAR5_val))]
 
-dat[, AREAVAR9 := categorise(AREAVAR9_val)]
-dat[, .N, keyby = .(AREAVAR9)][, P := round(prop.table(N), 3)][]
-dat[, cor(AREAVAR9_val, AREAVAR9)]
-copy.table("AREAVAR9")
-
+dat[, PERSVAR5 := categorise(PERSVAR5_val)]
+dat[, .N, keyby = .(PERSVAR5)][, P := round(prop.table(N), 3)][]
+dat[, cor(PERSVAR5_val, PERSVAR5)]
+copy.table("PERSVAR5")
+# 248 + 68
 
 # Share of one person households by JURISDICTION
 # https://data.stat.gov.lv/pxweb/en/OSP_PUB/START__POP__MV__MVS/MVS041/
@@ -771,7 +848,7 @@ api_meta$variables[[3]]$valueTexts
 api_meta$variables[[4]]$code
 api_meta$variables[[4]]$values
 
-dat_AREAVAR10 <- pxweb_get_data(
+dat_DUVAR_SCRRESP3 <- pxweb_get_data(
   url = api_url,
   query = pxweb_query(x = list(
     AREA = grep(pattern = "LV[0-9]{7}",
@@ -779,31 +856,31 @@ dat_AREAVAR10 <- pxweb_get_data(
                 value = T),
     SPH = c("TOTAL", "1"),
     ContentsCode = "MVS041",
-    TIME = "2022")),
+    TIME = "2023")),
   column.name.type = "code",
   variable.value.type = "code"
 )
 
-setDT(dat_AREAVAR10)
-setnames(dat_AREAVAR10, old = length(dat_AREAVAR10), new = "value")
-setnames(dat_AREAVAR10, tolower(names(dat_AREAVAR10)))
-dat_AREAVAR10
+setDT(dat_DUVAR_SCRRESP3)
+setnames(dat_DUVAR_SCRRESP3, old = length(dat_DUVAR_SCRRESP3), new = "value")
+setnames(dat_DUVAR_SCRRESP3, tolower(names(dat_DUVAR_SCRRESP3)))
+dat_DUVAR_SCRRESP3
 
-dat_AREAVAR10[substr(area, 7, 8) == "00", adm_terit_kods := substr(area, 3, 6)]
-dat_AREAVAR10[substr(area, 7, 8) != "00", atvk           := substr(area, 3, 9)]
+dat_DUVAR_SCRRESP3[substr(area, 7, 8) == "00", adm_terit_kods := substr(area, 3, 6)]
+dat_DUVAR_SCRRESP3[substr(area, 7, 8) != "00", atvk           := substr(area, 3, 9)]
 
-dat_AREAVAR10 <- dcast.data.table(data = dat_AREAVAR10,
+dat_DUVAR_SCRRESP3 <- dcast.data.table(data = dat_DUVAR_SCRRESP3,
                                   formula = adm_terit_kods + atvk ~ sph,
                                   value.var = "value")
 
-dat_AREAVAR10[, AREAVAR10 := `1` / TOTAL]
-dat_AREAVAR10[, summary(AREAVAR10)]
-dat_AREAVAR10[, c("1", "TOTAL") := NULL]
+dat_DUVAR_SCRRESP3[, DUVAR_SCRRESP3 := `1` / TOTAL]
+dat_DUVAR_SCRRESP3[, summary(DUVAR_SCRRESP3)]
+dat_DUVAR_SCRRESP3[, c("1", "TOTAL") := NULL]
 
 dat <- merge(
   x = dat,
-  y = dat_AREAVAR10[!is.na(adm_terit_kods),
-                    .(adm_terit_kods, AREAVAR10_adm = AREAVAR10)],
+  y = dat_DUVAR_SCRRESP3[!is.na(adm_terit_kods),
+                    .(adm_terit_kods, DUVAR_SCRRESP3_adm = DUVAR_SCRRESP3)],
   by = "adm_terit_kods",
   all.x = T,
   sort = F
@@ -811,32 +888,33 @@ dat <- merge(
 
 dat <- merge(
   x = dat,
-  y = dat_AREAVAR10[!is.na(atvk), .(atvk, AREAVAR10_ter = AREAVAR10)],
+  y = dat_DUVAR_SCRRESP3[!is.na(atvk), .(atvk, DUVAR_SCRRESP3_ter = DUVAR_SCRRESP3)],
   by = "atvk",
   all.x = T,
   sort = F
 )
 
-rm(dat_AREAVAR10)
+rm(dat_DUVAR_SCRRESP3)
 
-dat[!is.na(AREAVAR10_ter)]
-dat[, AREAVAR10_val := fifelse(is.na(AREAVAR10_ter), AREAVAR10_adm, AREAVAR10_ter)]
-dat[!is.na(AREAVAR10_ter)]
+dat[!is.na(DUVAR_SCRRESP3_ter)]
+dat[, DUVAR_SCRRESP3_val := fifelse(is.na(DUVAR_SCRRESP3_ter), DUVAR_SCRRESP3_adm, DUVAR_SCRRESP3_ter)]
+dat[!is.na(DUVAR_SCRRESP3_ter)]
 
-dat[, c("AREAVAR10_adm", "AREAVAR10_ter") := NULL]
+dat[, c("DUVAR_SCRRESP3_adm", "DUVAR_SCRRESP3_ter") := NULL]
 
-dat[, AREAVAR10 := categorise(AREAVAR10_val)]
-dat[, .N, keyby = .(AREAVAR10)][, P := round(prop.table(N), 3)][]
-dat[, cor(AREAVAR10_val, AREAVAR10)]
-copy.table("AREAVAR10")
+dat[, DUVAR_SCRRESP3 := categorise(DUVAR_SCRRESP3_val)]
+dat[, .N, keyby = .(DUVAR_SCRRESP3)][, P := round(prop.table(N), 3)][]
+dat[, cor(DUVAR_SCRRESP3_val, DUVAR_SCRRESP3)]
+copy.table("DUVAR_SCRRESP3")
+# 319 + 31
 
 
 # Add to SDIF
 
 dat_sdif <- merge(
   x = dat_sdif,
-  y = dat[, .(CASEID, AREAVAR4, AREAVAR5, AREAVAR6, AREAVAR7, AREAVAR8,
-              AREAVAR9, AREAVAR10)],
+  y = dat[, .(CASEID, AREAVAR4, AREAVAR5, PERSVAR2, PERSVAR3, PERSVAR4,
+              PERSVAR5, DUVAR_SCRRESP3)],
   by = "CASEID",
   all.x = T
 )
@@ -849,11 +927,11 @@ dat_sdif[, paste(range(SORT_PSU), collapse = "-")] |> cat("\n")
 dat_sdif[, paste(range(SORT_HH),  collapse = "-")] |> cat("\n")
 
 dat_sdif[, paste(round(range(AREAVAR5),  3), collapse = "-")] |> cat("\n")
-dat_sdif[, paste(round(range(AREAVAR6),  3), collapse = "-")] |> cat("\n")
-dat_sdif[, paste(round(range(AREAVAR7),  3), collapse = "-")] |> cat("\n")
-dat_sdif[, paste(round(range(AREAVAR8),  3), collapse = "-")] |> cat("\n")
-dat_sdif[, paste(round(range(AREAVAR9),  3), collapse = "-")] |> cat("\n")
-dat_sdif[, paste(round(range(AREAVAR10), 3), collapse = "-")] |> cat("\n")
+dat_sdif[, paste(round(range(PERSVAR2),  3), collapse = "-")] |> cat("\n")
+dat_sdif[, paste(round(range(PERSVAR3),  3), collapse = "-")] |> cat("\n")
+dat_sdif[, paste(round(range(PERSVAR4),  3), collapse = "-")] |> cat("\n")
+dat_sdif[, paste(round(range(PERSVAR5),  3), collapse = "-")] |> cat("\n")
+dat_sdif[, paste(round(range(DUVAR_SCRRESP3), 3), collapse = "-")] |> cat("\n")
 
 dat[, .N, keyby = .(reg_stat_kods, reg_stat_nosauk)]$reg_stat_nosauk |>
   paste(collapse = "\n") |> cat()
@@ -861,6 +939,58 @@ dat[, .N, keyby = .(reg_stat_kods, reg_stat_nosauk)]$reg_stat_nosauk |>
 
 dat[order(AREAVAR2), .(AREAVAR2, adm_terit_nosauk)] |> unique() |>
   clipr::write_clip(col.names = FALSE)
+
+
+
+# Extra variables
+
+# PROB_OVERALL_HH
+# Overall probability of selection of HH
+# 14,12
+dat_sdif[, PROB_OVERALL_HH := round(PROB_PSU * PROB_HH, 12)]
+all.equal(dat_sdif[, sum(1 / PROB_OVERALL_HH)], dat_frame[, .N])
+
+# THEOR_HBWT
+# Theoretical base weight for selected HH
+# (inverse overall selection probability of HH)
+# 13,6
+dat_sdif[, THEOR_HBWT := round(1 / PROB_OVERALL_HH, 6)]
+all.equal(dat_sdif[, sum(THEOR_HBWT)], dat_frame[, .N])
+
+# TRIMGRPS
+# Trimming domains
+# Required. Identifies the groups for computing the trimming factor. It should be consistent with oversampling domains or strata. Set to 1 if no oversampling.
+dat_sdif[, TRIMGRPS := 1L]
+
+
+# IFLG_PERSVAR[2-5]
+# Imputation flag for PERSVAR[2-5]
+# Required if any values of PERSVAR[2-5] were imputed for weighting; 1 = the value was imputed; 0 = not imputed. 
+dat_sdif[, IFLG_PERSVAR2 := 0L]
+dat_sdif[, IFLG_PERSVAR3 := 0L]
+dat_sdif[, IFLG_PERSVAR4 := 0L]
+dat_sdif[, IFLG_PERSVAR5 := 0L]
+
+# IFLG_DUVAR_SCRRESP3
+# Imputation flag for IFLG_DUVAR_SCRRESP3
+# Required if any values of DUVAR_SCRRESP3 were imputed for weighting; 1 = value was imputed; 0 = not imputed.
+dat_sdif[, IFLG_DUVAR_SCRRESP3 := 0L]
+
+# IFLG_DUVAR_ALL1
+# Imputation flag for DUVAR_ALL1
+# Required if any values of DUVAR_ALL1 were imputed for weighting; 1 = value was imputed; 0 = not imputed.
+dat_sdif[, IFLG_DUVAR_ALL1 := 0L]
+dat_sdif[, IFLG_DUVAR_ALL2 := 0L]
+
+# IFLG_AREAVAR1
+# Imputation flag for AREAVAR1
+# Required if any values of AREAVAR1 were imputed for weighting; 1 = value was imputed; 0 = not imputed.
+dat_sdif[, IFLG_AREAVAR1 := 0L]
+dat_sdif[, IFLG_AREAVAR2 := 0L]
+dat_sdif[, IFLG_AREAVAR3 := 0L]
+dat_sdif[, IFLG_AREAVAR4 := 0L]
+dat_sdif[, IFLG_AREAVAR5 := 0L]
+
 
 
 # Save
