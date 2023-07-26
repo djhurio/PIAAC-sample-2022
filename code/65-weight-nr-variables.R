@@ -945,17 +945,19 @@ dat[order(AREAVAR2), .(AREAVAR2, adm_terit_nosauk)] |> unique() |>
 # Extra variables
 
 # PROB_OVERALL_HH
+# Do not calculate! Will be calculated by the consorcium.
 # Overall probability of selection of HH
 # 14,12
-dat_sdif[, PROB_OVERALL_HH := round(PROB_PSU * PROB_HH, 12)]
-all.equal(dat_sdif[, sum(1 / PROB_OVERALL_HH)], dat_frame[, .N])
+# dat_sdif[, PROB_OVERALL_HH := round(PROB_PSU * PROB_HH, 12)]
+# all.equal(dat_sdif[, sum(1 / PROB_OVERALL_HH)], dat_frame[, .N])
 
 # THEOR_HBWT
+# Do not calculate! Will be calculated by the consorcium.
 # Theoretical base weight for selected HH
 # (inverse overall selection probability of HH)
 # 13,6
-dat_sdif[, THEOR_HBWT := round(1 / PROB_OVERALL_HH, 6)]
-all.equal(dat_sdif[, sum(THEOR_HBWT)], dat_frame[, .N])
+# dat_sdif[, THEOR_HBWT := round(1 / PROB_OVERALL_HH, 6)]
+# all.equal(dat_sdif[, sum(THEOR_HBWT)], dat_frame[, .N])
 
 # TRIMGRPS
 # Trimming domains
